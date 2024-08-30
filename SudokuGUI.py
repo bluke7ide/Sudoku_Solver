@@ -9,26 +9,38 @@ class SudokuGUI:
         self.create_widgets()
 
     def create_widgets(self):
-        frame = tk.Frame(self.root)
-        frame.pack()
+        canvas = tk.Canvas(self.root, width=450, height=450, bg="white")
+        canvas.pack()
 
+        # Dibujar las líneas divisorias del tablero
+        self.draw_board(canvas)
+
+        # Crear las entradas de texto
         for i in range(9):
             for j in range(9):
-                entry = tk.Entry(frame, width=2, font=('Arial', 18), justify='center', bd=1, relief='solid')
-
-                # Añadir borde más grueso en las líneas divisorias de los subcuadrantes
-                if i in {0, 3, 6}:
-                    entry.grid(row=i, column=j, padx=(2, 0), pady=(2, 0))
-                else:
-                    entry.grid(row=i, column=j, padx=(0, 0), pady=(0, 0))
-
-                if j in {2, 5, 8}:
-                    entry.grid(padx=(0, 2), pady=(0, 0))
-
+                entry = tk.Entry(self.root, width=1, font=('Arial', 18), justify='center', bd=1, relief='solid')
+                entry_window = canvas.create_window(50 * j + 25, 50 * i + 25, window=entry, width=49, height=49)
                 self.entries[i][j] = entry
 
-        btn_submit = tk.Button(self.root, text="Submit", command=self.submit_board)
-        btn_submit.pack(pady=10)
+        
+        self.root.title("Sudoku")
+        menu = tk.Menu(self.root)
+        self.root.config(menu = menu)
+
+        file = tk.Menu(menu)
+        menu.add_cascade(label = 'File', menu = file)
+        file.add_command(label = 'Submit', command = self.submit_board)
+
+    def draw_board(self, canvas):
+        cell_size = 50
+
+        for i in range(9):
+            width = 5 if i % 3 == 0 else 1
+            color = "blue" if i % 3 == 0 else "gray"
+            # Líneas horizontales
+            canvas.create_line(0, i * cell_size, 450, i * cell_size, fill=color, width=width)
+            # Líneas verticales
+            canvas.create_line(i * cell_size, 0, i * cell_size, 450, fill=color, width=width)
 
     def submit_board(self):
         for i in range(9):
@@ -43,3 +55,4 @@ class SudokuGUI:
             messagebox.showinfo("Sudoku", "¡Tablero válido!")
         else:
             messagebox.showerror("Sudoku", "Tablero inválido. Revisa tus números.")
+            

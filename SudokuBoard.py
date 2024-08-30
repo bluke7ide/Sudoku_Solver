@@ -27,10 +27,5 @@ class SudokuBoard:
                 block = [self.board[r][c] for r in range(i, i+3) for c in range(j, j+3)]
                 if not is_valid_group(block):
                     return False
-        
+                  
         return True
-
-
-
-
-
