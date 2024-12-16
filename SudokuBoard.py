@@ -1,7 +1,18 @@
+import numpy as np
+class SudokuCell:
+    def __init__(self, row, col):
+        # Inicializar la celda
+        self.coords = [row, col]
+        self.posible = [1,2,3,4,5,6,7,8,9]
+        
 class SudokuBoard:
     def __init__(self):
         # Inicializar el tablero vacío
         self.board = [[0]*9 for _ in range(9)]
+        self.cells = [[0]*9 for _ in range(9)]
+        for i in range(9):
+            for j in range(9):
+                self.cells[i][j] = SudokuCell(i,j)
 
     def add_number(self, row, col, number):
         # Agregar un número al tablero
@@ -9,23 +20,23 @@ class SudokuBoard:
             self.board[row][col] = number
         else:
             raise ValueError("Posición o número inválido")
-
-    def is_valid(self):
-        # Verificar si el tablero es válido
-        def is_valid_group(group):
-            group = [num for num in group if num != 0]
-            return len(group) == len(set(group))
+            
+    def verificarPosibles(self, row, col):
+        marcados = []
+        columna = [r[col] for r in self.board]
+        fila = self.board[row]
+        coords = [3*(row%3), 3*(col%3)]
+        square = [[0]*9]
+        lim = [3*(row%3+1), 3*(col%3+1)]
+        con = 0
+        for i in range(coords[1], lim[1]):
+            for j in range(coords[2], lim[2]):
+                square[con] = self.board[i][j]
+                con += 1
+        dados = columna + fila + square
+        dados = np.unique(dados)
+        dados.remove(0)
+        self.cells[coords[1]][coords[2]].posible = marcados
         
-        # Verificar filas y columnas
-        for i in range(9):
-            if not is_valid_group(self.board[i]) or not is_valid_group([self.board[j][i] for j in range(9)]):
-                return False
 
-        # Verificar subcuadrículas de 3x3
-        for i in range(0, 9, 3):
-            for j in range(0, 9, 3):
-                block = [self.board[r][c] for r in range(i, i+3) for c in range(j, j+3)]
-                if not is_valid_group(block):
-                    return False
-                  
-        return True
+
