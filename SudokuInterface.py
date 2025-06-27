@@ -10,7 +10,8 @@ GRIS_CLARO = "#cccccc"
 
 class SudokuCell(tk.Canvas):
     def __init__(self, master, row, col):
-        super().__init__(master, width=80, height=80, bg=AZUL_CLARO, highlightthickness=0)
+        self.cell_size = 80  # tamaño inicial
+        super().__init__(master, width=self.cell_size, height=self.cell_size, bg=AZUL_CLARO, highlightthickness=0)
         self.row, self.col = row, col
         self.number = None
         self.notes = set()
@@ -23,33 +24,45 @@ class SudokuCell(tk.Canvas):
 
     def update_display(self):
         self.delete("all")
-        self.create_line(0, 0, 80, 0, width=1, fill=GRIS_CLARO)
-        self.create_line(0, 80, 80, 80, width=1, fill=GRIS_CLARO)
-        self.create_line(0, 0, 0, 80, width=1, fill=GRIS_CLARO)
-        self.create_line(80, 0, 80, 80, width=1, fill=GRIS_CLARO)
 
+        size = self.cell_size
+        line_width = 1
+        thick_line_width = 3
+
+        # Líneas internas
+        self.create_line(0, 0, size, 0, width=line_width, fill=GRIS_CLARO)
+        self.create_line(0, size, size, size, width=line_width, fill=GRIS_CLARO)
+        self.create_line(0, 0, 0, size, width=line_width, fill=GRIS_CLARO)
+        self.create_line(size, 0, size, size, width=line_width, fill=GRIS_CLARO)
+
+        # Líneas gruesas para bloques 3x3
         if self.row % 3 == 0:
-            self.create_line(0, 0, 80, 0, width=3, fill=NEGRO)
+            self.create_line(0, 0, size, 0, width=thick_line_width, fill=NEGRO)
         if self.row % 3 == 2:
-            self.create_line(0, 80, 80, 80, width=3, fill=NEGRO)
+            self.create_line(0, size, size, size, width=thick_line_width, fill=NEGRO)
         if self.col % 3 == 0:
-            self.create_line(0, 0, 0, 80, width=3, fill=NEGRO)
+            self.create_line(0, 0, 0, size, width=thick_line_width, fill=NEGRO)
         if self.col % 3 == 2:
-            self.create_line(80, 0, 80, 80, width=3, fill=NEGRO)
+            self.create_line(size, 0, size, size, width=thick_line_width, fill=NEGRO)
 
+        # Texto número
         if self.number is not None:
-            self.create_text(40, 40, text=str(self.number), font=("Arial", 24), fill=AZUL_OSCURO)
+            font_size = max(int(size * 0.3), 8)
+            self.create_text(size/2, size/2, text=str(self.number), font=("Arial", font_size), fill=AZUL_OSCURO)
         else:
+            # notas pequeñas
+            note_font_size = max(int(size * 0.1), 6)
             for val in range(1, 10):
                 if val in self.notes:
                     row = (val - 1) // 3
                     col = (val - 1) % 3
-                    x = 20 + col * 20
-                    y = 20 + row * 20
-                    self.create_text(x, y, text=str(val), font=("Arial", 8), fill=AZUL_OSCURO)
+                    x = size*0.25 + col * (size*0.25)
+                    y = size*0.25 + row * (size*0.25)
+                    self.create_text(x, y, text=str(val), font=("Arial", note_font_size), fill=AZUL_OSCURO)
 
+        # Selección
         if self.selected:
-            self.create_rectangle(2, 2, 78, 78, outline="blue", width=3)
+            self.create_rectangle(size*0.025, size*0.025, size*0.975, size*0.975, outline="blue", width=3)
 
     def select_cell(self, event=None):
         self.master.master.set_selected_cell(self)
@@ -70,12 +83,17 @@ class SudokuCell(tk.Canvas):
         self.selected = selected
         self.update_display()
 
+    def resize(self, new_size):
+        self.cell_size = new_size
+        self.config(width=new_size, height=new_size)
+        self.update_display()
+
 class SudokuGUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Sudoku")
         self.configure(bg=AZUL_MEDIO)
-        self.geometry("800x900")
+        self.geometry("600x800")
 
         self.grid_frame = tk.Frame(self, bg=AZUL_MEDIO)
         self.grid_frame.pack(pady=20)
@@ -111,20 +129,14 @@ class SudokuGUI(tk.Tk):
             )
             btn.pack(side="left", padx=2)
 
+        self.delete_button = tk.Button(
+            self.control_frame, text="Borrar", width=5, height=2,
+            command=self.clear_selected_cell, bg=AZUL_OSCURO, fg="white"
+        )
+        self.delete_button.pack(side="left", padx=10)
+
         self.action_frame = tk.Frame(self, bg=AZUL_MEDIO)
         self.action_frame.pack(pady=10)
-
-        self.solve_button = tk.Button(
-            self.action_frame, text="Resolver Sudoku",
-            bg=AZUL_OSCURO, fg="white", command=self.solve_sudoku
-        )
-        self.solve_button.pack(side="left", padx=10)
-
-        self.step_button = tk.Button(
-            self.action_frame, text="Paso a paso",
-            bg=AZUL_OSCURO, fg="white", command=self.solve_step_by_step
-        )
-        self.step_button.pack(side="left", padx=10)
 
         self.import_button = tk.Button(
             self.action_frame, text="Importar Excel",
@@ -138,12 +150,77 @@ class SudokuGUI(tk.Tk):
         )
         self.clear_button.pack(side="left", padx=10)
 
+        self.solution_toggle = tk.Button(
+            self, text="", bg=AZUL_MEDIO, relief="flat", command=self.toggle_solution_buttons,
+            width=2, height=1, highlightthickness=0, bd=0, activebackground=AZUL_OSCURO
+        )
+        self.solution_toggle.place(relx=1.0, rely=1.0, anchor="se", x=0, y=0)
+
+        self.solution_frame = tk.Frame(self, bg=AZUL_MEDIO)
+        self.solution_visible = False
+
+        self.last_cell_size = None
+        self.bind("<Configure>", self.on_resize)
+
+    def on_resize(self, event):
+        w = self.winfo_width()
+        h = self.winfo_height()
+
+        if w < 300 or h < 350:
+            return
+
+        margin_w = 40
+        margin_h = 150
+
+        available_w = w - margin_w
+        available_h = h - margin_h
+
+        new_cell_size = int(min(available_w, available_h) / 9)
+
+        if new_cell_size < 40:
+            new_cell_size = 40
+        elif new_cell_size > 120:
+            new_cell_size = 120
+
+        if new_cell_size != self.last_cell_size:
+            self.last_cell_size = new_cell_size
+            for row in self.cells:
+                for cell in row:
+                    cell.resize(new_cell_size)
+
+    def toggle_solution_buttons(self):
+        if self.solution_visible:
+            for widget in self.solution_frame.winfo_children():
+                widget.destroy()
+            self.solution_frame.place_forget()
+        else:
+            self.solve_button = tk.Button(
+                self.solution_frame, text="Resolver Sudoku", bg=AZUL_OSCURO, fg="white",
+                command=self.solve_sudoku
+            )
+            self.solve_button.pack(pady=5)
+
+            self.step_button = tk.Button(
+                self.solution_frame, text="Paso a paso", bg=AZUL_OSCURO, fg="white",
+                command=self.solve_step_by_step
+            )
+            self.step_button.pack(pady=5)
+
+            self.solution_frame.place(relx=0.0, rely=1.0, anchor="sw", x=10, y=-10)
+        self.solution_visible = not self.solution_visible
+
+    def clear_selected_cell(self):
+        if self.selected_cell:
+            self.selected_cell.set_number(None)
+
     def confirm_clear_board(self):
         confirm = messagebox.askyesno("Confirmar", "¿Seguro que deseas borrar todo el tablero?")
         if confirm:
             for row in self.cells:
                 for cell in row:
                     cell.set_number(None)
+                    cell.notes.clear()
+                    cell.update_display()
 
     def set_selected_cell(self, cell):
         if self.selected_cell:
@@ -155,8 +232,9 @@ class SudokuGUI(tk.Tk):
     def move_selection(self, dr, dc):
         if self.selected_cell:
             r, c = self.selected_cell.row, self.selected_cell.col
-            nr, nc = (r + dr) % 9, (c + dc) % 9
-            self.set_selected_cell(self.cells[nr][nc])
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < 9 and 0 <= nc < 9:
+                self.set_selected_cell(self.cells[nr][nc])
 
     def toggle_mode(self):
         self.mode = "note" if self.mode == "number" else "number"
@@ -173,8 +251,7 @@ class SudokuGUI(tk.Tk):
 
     def key_input(self, event):
         if event.keysym in ('BackSpace', 'Delete'):
-            if self.selected_cell:
-                self.selected_cell.set_number(None)
+            self.clear_selected_cell()
         elif event.char in '123456789':
             if self.selected_cell:
                 if self.mode == "number":
