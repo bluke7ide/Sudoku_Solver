@@ -5,8 +5,10 @@ import pandas as pd
 AZUL_CLARO = "#e0f0ff"
 AZUL_MEDIO = "#99ccff"
 AZUL_OSCURO = "#336699"
+AZUL_OSCURO_DESHABILITADO = "#224466"
 NEGRO = "black"
 GRIS_CLARO = "#cccccc"
+ROJO = "red"
 
 class SudokuCell(tk.Canvas):
     def __init__(self, master, row, col):
@@ -17,19 +19,19 @@ class SudokuCell(tk.Canvas):
         self.number = None
         self.notes = set()
         self.selected = False
+        self.error = False
+        self.error_notes = set()
         self.bind("<Button-1>", self.select_cell)
 
     def update_display(self):
         self.delete("all")
         s, lw, thw = self.cell_size, 1, 3
 
-        # líneas internas
         self.create_line(0, 0, s, 0, width=lw, fill=GRIS_CLARO)
         self.create_line(0, s, s, s, width=lw, fill=GRIS_CLARO)
         self.create_line(0, 0, 0, s, width=lw, fill=GRIS_CLARO)
         self.create_line(s, 0, s, s, width=lw, fill=GRIS_CLARO)
 
-        # líneas gruesas 3×3
         if self.row % 3 == 0:
             self.create_line(0, 0, s, 0, width=thw, fill=NEGRO)
         if self.row % 3 == 2:
@@ -39,24 +41,27 @@ class SudokuCell(tk.Canvas):
         if self.col % 3 == 2:
             self.create_line(s, 0, s, s, width=thw, fill=NEGRO)
 
-        # número o notas
         if self.number is not None:
             fs = max(int(s * 0.3), 8)
+            color = ROJO if self.error else AZUL_OSCURO
             self.create_text(s/2, s/2, text=str(self.number),
-                             font=("Arial", fs), fill=AZUL_OSCURO)
+                             font=("Arial", fs), fill=color)
         else:
             nfs = max(int(s * 0.1), 6)
             for val in self.notes:
                 rr, cc = divmod(val-1, 3)
                 x = s*0.25 + cc*(s*0.25)
                 y = s*0.25 + rr*(s*0.25)
+                color = ROJO if val in self.error_notes else AZUL_OSCURO
                 self.create_text(x, y, text=str(val),
-                                 font=("Arial", nfs), fill=AZUL_OSCURO)
+                                 font=("Arial", nfs), fill=color)
 
-        # selección
         if self.selected:
             m = s * 0.025
             self.create_rectangle(m, m, s-m, s-m, outline="blue", width=3)
+
+        if self.error:
+            self.create_rectangle(0, 0, s, s, outline=ROJO, width=3)
 
     def select_cell(self, event=None):
         self.master.master.set_selected_cell(self)
@@ -82,6 +87,7 @@ class SudokuCell(tk.Canvas):
         self.config(width=new_size, height=new_size)
         self.update_display()
 
+
 class SudokuGUI(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -89,7 +95,9 @@ class SudokuGUI(tk.Tk):
         self.configure(bg=AZUL_MEDIO)
         self.geometry("600x750")
 
-        # tablero
+        self.history = []
+        self.error_focus = False
+
         self.grid_frame = tk.Frame(self, bg=AZUL_MEDIO)
         self.grid_frame.pack(pady=20)
         self.cells = [
@@ -101,15 +109,14 @@ class SudokuGUI(tk.Tk):
                 self.cells[r][c].grid(row=r, column=c)
                 self.cells[r][c].update_display()
 
-        # selección + teclado
         self.selected_cell = None
         self.bind_all('<Key>', self.key_input)
-        self.bind_all('<Up>',    lambda e: self.move_selection(-1, 0))
-        self.bind_all('<Down>',  lambda e: self.move_selection(1, 0))
-        self.bind_all('<Left>',  lambda e: self.move_selection(0, -1))
+        self.bind_all('<Control-z>', self.undo_last_action)
+        self.bind_all('<Up>', lambda e: self.move_selection(-1, 0))
+        self.bind_all('<Down>', lambda e: self.move_selection(1, 0))
+        self.bind_all('<Left>', lambda e: self.move_selection(0, -1))
         self.bind_all('<Right>', lambda e: self.move_selection(0, 1))
 
-        # controles número/nota
         self.control_frame = tk.Frame(self, bg=AZUL_MEDIO)
         self.control_frame.pack()
         self.mode = "number"
@@ -132,39 +139,70 @@ class SudokuGUI(tk.Tk):
         )
         self.delete_button.pack(side="left", padx=10)
 
-        # botones acción
         self.action_frame = tk.Frame(self, bg=AZUL_MEDIO)
         self.action_frame.pack(pady=10)
-        for btn in (
-            ("Cargar Partida", self.import_from_excel),
-            ("Guardar Partida", self.save_to_excel),
-            ("Limpiar Tablero", self.confirm_clear_board)
-        ):
-            b = tk.Button(self.action_frame, text=btn[0], command=btn[1],
-                          bg=(AZUL_OSCURO if btn[0]!="Limpiar Tablero" else "red"),
-                          fg="white", width=12, height=1)
+
+        self.error_button = tk.Button(
+            self.action_frame, text="Enfocar Errores", width=14,
+            command=self.toggle_error_focus,
+            bg=AZUL_OSCURO, fg="white"
+        )
+        self.error_button.pack(side="left", padx=5)
+
+        self.undo_button = tk.Button(
+            self.action_frame, text="Deshacer", width=14,
+            command=self.undo_last_action,
+            bg=AZUL_OSCURO_DESHABILITADO, fg="white", state="disabled"
+        )
+        self.undo_button.pack(side="left", padx=5)
+
+        for (label, cmd, color) in [
+            ("Cargar Partida", self.import_from_excel, AZUL_OSCURO),
+            ("Guardar Partida", self.save_to_excel, AZUL_OSCURO),
+            ("Limpiar Tablero", self.confirm_clear_board, "red"),
+        ]:
+            b = tk.Button(self.action_frame, text=label, command=cmd,
+                          bg=color, fg="white", width=14, height=1)
             b.pack(side="left", padx=5)
 
-        # engranaje y soluciones
-        self.solution_toggle = tk.Button(
-            self, text="", bg=AZUL_MEDIO, relief="flat",
-            command=self.toggle_solution_buttons,
-            width=2, height=1, highlightthickness=0, bd=0,
-            activebackground=AZUL_OSCURO
-        )
-        self.solution_toggle.place(relx=1.0, rely=1.0, anchor="se")
-        self.solution_frame = tk.Frame(self, bg=AZUL_MEDIO)
-        self.solution_visible = False
-
-        # redimensionado
         self.last_cell_size = None
         self.bind("<Configure>", self.on_resize)
+        self.update_undo_button_state()
+
+    def update_undo_button_state(self):
+        if self.history:
+            self.undo_button.config(state="normal", bg=AZUL_OSCURO)
+        else:
+            self.undo_button.config(state="disabled", bg=AZUL_OSCURO_DESHABILITADO)
+
+    def capture_board_state(self):
+        return [
+            [(cell.number, set(cell.notes)) for cell in row]
+            for row in self.cells
+        ]
+
+    def restore_board_state(self, state):
+        for i in range(9):
+            for j in range(9):
+                num, notes = state[i][j]
+                cell = self.cells[i][j]
+                cell.number = num
+                cell.notes = set(notes)
+                cell.update_display()
+        if self.error_focus:
+            self.check_conflicts()
+        self.update_undo_button_state()
+
+    def undo_last_action(self, event=None):
+        if self.history:
+            last = self.history.pop()
+            self.restore_board_state(last)
 
     def on_resize(self, event):
         w, h = self.winfo_width(), self.winfo_height()
         if w < 300 or h < 350: return
         m_w, m_h = 40, 150
-        new_size = int(min((w-m_w)/9, (h-m_h)/9))
+        new_size = int(min((w - m_w) / 9, (h - m_h) / 9))
         new_size = max(40, min(new_size, 120))
         if new_size != self.last_cell_size:
             self.last_cell_size = new_size
@@ -172,32 +210,97 @@ class SudokuGUI(tk.Tk):
                 for cell in row:
                     cell.resize(new_size)
 
-    def toggle_solution_buttons(self):
-        if self.solution_visible:
-            for w in self.solution_frame.winfo_children(): w.destroy()
-            self.solution_frame.place_forget()
-        else:
-            tk.Button(self.solution_frame, text="Resolver Sudoku", bg=AZUL_OSCURO,
-                      fg="white", command=self.solve_sudoku).pack(pady=5)
-            tk.Button(self.solution_frame, text="Paso a paso", bg=AZUL_OSCURO,
-                      fg="white", command=self.solve_step_by_step).pack(pady=5)
-            self.solution_frame.place(relx=0, rely=1, anchor="sw", x=10, y=-10)
-        self.solution_visible = not self.solution_visible
+    def toggle_mode(self):
+        self.mode = "note" if self.mode == "number" else "number"
+        self.mode_button.config(text=f"Modo: {'Nota' if self.mode == 'note' else 'Número'}")
+
+    def toggle_error_focus(self):
+        self.error_focus = not self.error_focus
+        self.error_button.config(bg=ROJO if self.error_focus else AZUL_OSCURO)
+        self.check_conflicts()
+
+    def check_conflicts(self):
+        for row in self.cells:
+            for cell in row:
+                cell.error = False
+                cell.error_notes.clear()
+
+        def collect(r, c): return self.cells[r][c].number
+
+        for i in range(9):
+            self.mark_duplicates([(i, j) for j in range(9)], [collect(i, j) for j in range(9)])
+            self.mark_duplicates([(j, i) for j in range(9)], [collect(j, i) for j in range(9)])
+
+        for bi in range(3):
+            for bj in range(3):
+                block = []
+                vals = []
+                for i in range(3):
+                    for j in range(3):
+                        r, c = bi * 3 + i, bj * 3 + j
+                        block.append((r, c))
+                        vals.append(collect(r, c))
+                self.mark_duplicates(block, vals)
+
+        if self.error_focus:
+            for r in range(9):
+                for c in range(9):
+                    cell = self.cells[r][c]
+                    if cell.number is None:
+                        for note in list(cell.notes):
+                            if self.note_violates(r, c, note):
+                                cell.error_notes.add(note)
+
+        for row in self.cells:
+            for cell in row:
+                cell.update_display()
+
+    def mark_duplicates(self, positions, values):
+        seen = {}
+        for idx, v in enumerate(values):
+            if v is None: continue
+            if v in seen:
+                r1, c1 = positions[seen[v]]
+                r2, c2 = positions[idx]
+                self.cells[r1][c1].error = True
+                self.cells[r2][c2].error = True
+            else:
+                seen[v] = idx
+
+    def note_violates(self, row, col, value):
+        for i in range(9):
+            if self.cells[row][i].number == value: return True
+            if self.cells[i][col].number == value: return True
+        br, bc = 3 * (row // 3), 3 * (col // 3)
+        for i in range(3):
+            for j in range(3):
+                if self.cells[br + i][bc + j].number == value: return True
+        return False
 
     def clear_selected_cell(self):
-        if self.selected_cell: self.selected_cell.set_number(None)
+        if self.selected_cell:
+            self.history.append(self.capture_board_state())
+            self.selected_cell.set_number(None)
+            if self.error_focus:
+                self.check_conflicts()
+            self.update_undo_button_state()
 
     def confirm_clear_board(self):
         if messagebox.askyesno("Confirmar", "¿Borrar todo el tablero?"):
+            self.history.clear()
             for row in self.cells:
                 for cell in row:
                     cell.number = None
                     cell.notes.clear()
                     cell.update_display()
+            if self.error_focus:
+                self.check_conflicts()
+            self.update_undo_button_state()
 
-    def set_selected_cell(self, c):
-        if self.selected_cell: self.selected_cell.set_selected(False)
-        self.selected_cell = c
+    def set_selected_cell(self, cell):
+        if self.selected_cell:
+            self.selected_cell.set_selected(False)
+        self.selected_cell = cell
         self.selected_cell.set_selected(True)
         self.focus_set()
 
@@ -208,91 +311,77 @@ class SudokuGUI(tk.Tk):
         if 0 <= nr < 9 and 0 <= nc < 9:
             self.set_selected_cell(self.cells[nr][nc])
 
-    def toggle_mode(self):
-        self.mode = "note" if self.mode=="number" else "number"
-        self.mode_button.config(text=f"Modo: {'Nota' if self.mode=='note' else 'Número'}")
-
     def enter_input(self, num):
         if not self.selected_cell: return
-        if self.mode=="number": self.selected_cell.set_number(num)
-        else: self.selected_cell.toggle_note(num)
+        self.history.append(self.capture_board_state())
+        if self.mode == "number":
+            self.selected_cell.set_number(num)
+        else:
+            self.selected_cell.toggle_note(num)
+        if self.error_focus:
+            self.check_conflicts()
+        self.update_undo_button_state()
 
     def key_input(self, event):
-        if event.keysym in ('BackSpace','Delete'): self.clear_selected_cell()
-        elif event.char in '123456789': self.enter_input(int(event.char))
-
-    def get_grid_as_matrix(self):
-        return [[cell.number or 0 for cell in row] for row in self.cells]
-
-    def solve_sudoku(self): pass
-    def solve_step_by_step(self): pass
+        if event.keysym in ('BackSpace', 'Delete'):
+            self.clear_selected_cell()
+        elif event.char == '0':
+            self.toggle_mode()
+        elif event.char in '123456789':
+            self.enter_input(int(event.char))
 
     def import_from_excel(self):
-        path = filedialog.askopenfilename(
-            filetypes=[("Excel files", "*.xlsx *.xls")])
-        if not path:
-            return
+        path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
+        if not path: return
         try:
+            self.history.clear()
             nums = pd.read_excel(path, header=None, sheet_name=0)
             xls = pd.ExcelFile(path)
             has_notes = len(xls.sheet_names) > 1
             notes = pd.read_excel(path, header=None, sheet_name=1) if has_notes else None
-    
+
             for i in range(9):
                 for j in range(9):
                     cell = self.cells[i][j]
-    
-                    # Cargar número
                     v = nums.iat[i, j] if i < nums.shape[0] and j < nums.shape[1] else None
                     num = None
                     try:
                         if pd.notna(v):
-                            num_candidate = int(float(str(v).strip()))
-                            if 1 <= num_candidate <= 9:
-                                num = num_candidate
-                    except Exception:
-                        pass
+                            cand = int(float(str(v).strip()))
+                            if 1 <= cand <= 9: num = cand
+                    except: pass
                     cell.number = num
                     cell.notes.clear()
-    
-                    # Cargar notas solo si no hay número
+
                     if has_notes and cell.number is None:
-                        try:
-                            raw_note = notes.iat[i, j] if i < notes.shape[0] and j < notes.shape[1] else None
-                            if pd.notna(raw_note):
-                                txt = str(raw_note)
-                                for part in txt.split(","):
+                        if i < notes.shape[0] and j < notes.shape[1]:
+                            raw = notes.iat[i, j]
+                            if pd.notna(raw):
+                                for part in str(raw).split(","):
                                     if part.strip().isdigit():
                                         val = int(part.strip())
                                         if 1 <= val <= 9:
                                             cell.notes.add(val)
-                        except Exception:
-                            pass
-    
                     cell.update_display()
+            if self.error_focus:
+                self.check_conflicts()
+            self.update_undo_button_state()
         except Exception as e:
             messagebox.showerror("Error", "No se pudo cargar:\n" + str(e))
 
-
-
     def save_to_excel(self):
-        path = filedialog.asksaveasfilename(
-            defaultextension=".xlsx",
-            filetypes=[("Excel files","*.xlsx *.xls")])
+        path = filedialog.asksaveasfilename(defaultextension=".xlsx",
+                                            filetypes=[("Excel files", "*.xlsx *.xls")])
         if not path: return
         try:
-            df_nums = pd.DataFrame(self.get_grid_as_matrix())
-            df_notes = pd.DataFrame([
-                [",".join(str(n) for n in cell.notes) for cell in row]
-                for row in self.cells
-            ])
-            with pd.ExcelWriter(path) as writer:
-                df_nums.to_excel(writer, sheet_name="Numbers", index=False, header=False)
-                df_notes.to_excel(writer, sheet_name="Notes", index=False, header=False)
-            messagebox.showinfo("Guardado","Partida y notas guardadas.")
+            df_nums = pd.DataFrame([[cell.number or 0 for cell in row] for row in self.cells])
+            df_notes = pd.DataFrame([[",".join(str(n) for n in cell.notes) for cell in row] for row in self.cells])
+            with pd.ExcelWriter(path) as w:
+                df_nums.to_excel(w, sheet_name="Numbers", index=False, header=False)
+                df_notes.to_excel(w, sheet_name="Notes", index=False, header=False)
+            messagebox.showinfo("Guardado", "Partida y notas guardadas.")
         except Exception as e:
-            messagebox.showerror("Error","No se pudo guardar:\n"+str(e))
-
+            messagebox.showerror("Error", "No se pudo guardar:\n" + str(e))
 
 if __name__ == "__main__":
     app = SudokuGUI()
