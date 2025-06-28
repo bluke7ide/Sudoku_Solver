@@ -93,7 +93,7 @@ class SudokuGUI(tk.Tk):
         super().__init__()
         self.title("Sudoku")
         self.configure(bg=AZUL_MEDIO)
-        self.geometry("600x750")
+        self.geometry("600x775")
 
         self.history = []
         self.error_focus = False
@@ -121,7 +121,8 @@ class SudokuGUI(tk.Tk):
         self.control_frame.pack()
         self.mode = "number"
         self.mode_button = tk.Button(
-            self.control_frame, text="Modo: Número", command=self.toggle_mode,
+            self.control_frame, text="Num", width=5, height=2, 
+            command=self.toggle_mode,
             bg=AZUL_OSCURO, fg="white"
         )
         self.mode_button.pack(side="left", padx=10, pady=10)
@@ -138,9 +139,16 @@ class SudokuGUI(tk.Tk):
             bg=AZUL_OSCURO, fg="white"
         )
         self.delete_button.pack(side="left", padx=10)
+        
+        self.undo_button = tk.Button(
+            self.control_frame, text="Undo", width=5, height=2,
+            command=self.undo_last_action,
+            bg=AZUL_OSCURO_DESHABILITADO, fg="white", state="disabled"
+        )
+        self.undo_button.pack(side="left", padx=10)
 
         self.action_frame = tk.Frame(self, bg=AZUL_MEDIO)
-        self.action_frame.pack(pady=10)
+        self.action_frame.pack(pady=5)
 
         self.error_button = tk.Button(
             self.action_frame, text="Enfocar Errores", width=14,
@@ -148,13 +156,16 @@ class SudokuGUI(tk.Tk):
             bg=AZUL_OSCURO, fg="white"
         )
         self.error_button.pack(side="left", padx=5)
-
-        self.undo_button = tk.Button(
-            self.action_frame, text="Deshacer", width=14,
-            command=self.undo_last_action,
-            bg=AZUL_OSCURO_DESHABILITADO, fg="white", state="disabled"
+        
+        self.solution_toggle = tk.Button(
+            self, text="", bg=AZUL_MEDIO, relief="flat", command=self.toggle_solution_buttons,
+            width=2, height=1, highlightthickness=0, bd=0, activebackground=AZUL_OSCURO
         )
-        self.undo_button.pack(side="left", padx=5)
+        self.solution_toggle.place(relx=1.0, rely=1.0, anchor="se", x=0, y=0)
+
+        self.solution_frame = tk.Frame(self, bg=AZUL_MEDIO)
+        self.solution_visible = False
+
 
         for (label, cmd, color) in [
             ("Cargar Partida", self.import_from_excel, AZUL_OSCURO),
@@ -209,10 +220,32 @@ class SudokuGUI(tk.Tk):
             for row in self.cells:
                 for cell in row:
                     cell.resize(new_size)
+                    
+    def toggle_solution_buttons(self):
+        if self.solution_visible:
+            for widget in self.solution_frame.winfo_children():
+                widget.destroy()
+            self.solution_frame.place_forget()
+        else:
+            self.solve_button = tk.Button(
+                self.solution_frame, text="Resolver Sudoku", bg=AZUL_OSCURO, fg="white",
+                command=self.solve_sudoku
+            )
+            self.solve_button.pack(pady=5)
+
+            self.step_button = tk.Button(
+                self.solution_frame, text="Paso a paso", bg=AZUL_OSCURO, fg="white",
+                command=self.solve_step_by_step
+            )
+            self.step_button.pack(pady=5)
+
+            self.solution_frame.place(relx=0.0, rely=1.0, anchor="sw", x=10, y=-10)
+        self.solution_visible = not self.solution_visible
 
     def toggle_mode(self):
         self.mode = "note" if self.mode == "number" else "number"
-        self.mode_button.config(text=f"Modo: {'Nota' if self.mode == 'note' else 'Número'}")
+        self.mode_button.config(text=f"{'Nota' if self.mode == 'note' else 'Num'}")
+        self.mode_button.config(bg="#33ccff" if self.mode == "note" else AZUL_OSCURO)
 
     def toggle_error_focus(self):
         self.error_focus = not self.error_focus
@@ -382,6 +415,12 @@ class SudokuGUI(tk.Tk):
             messagebox.showinfo("Guardado", "Partida y notas guardadas.")
         except Exception as e:
             messagebox.showerror("Error", "No se pudo guardar:\n" + str(e))
+            
+    def solve_sudoku(self):
+        pass  # <-- AQUÍ VA TU SOLVER COMPLETO
+
+    def solve_step_by_step(self):
+        pass  # <-- AQUÍ VA TU SOLVER PASO A PASO
 
 if __name__ == "__main__":
     app = SudokuGUI()
