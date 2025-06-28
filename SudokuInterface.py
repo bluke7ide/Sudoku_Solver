@@ -415,12 +415,177 @@ class SudokuGUI(tk.Tk):
             messagebox.showinfo("Guardado", "Partida y notas guardadas.")
         except Exception as e:
             messagebox.showerror("Error", "No se pudo guardar:\n" + str(e))
-            
+        
+    def initialize_notes(self):
+        """
+        Para cada celda vacía, calcula sus candidatos (notas)
+        eliminando los números ya presentes en su fila, columna y bloque 3×3.
+        """
+        for r in range(9):
+            for c in range(9):
+                cell = self.cells[r][c]
+                if cell.number is None:
+                    # Empiezo con todos los números posibles
+                    candidates = set(range(1, 10))
+                    # Quito los números de la fila
+                    candidates -= {self.cells[r][j].number for j in range(9) if self.cells[r][j].number}
+                    # Quito los números de la columna
+                    candidates -= {self.cells[i][c].number for i in range(9) if self.cells[i][c].number}
+                    # Quito los números del bloque 3×3
+                    br, bc = 3*(r//3), 3*(c//3)
+                    for i in range(3):
+                        for j in range(3):
+                            n = self.cells[br+i][bc+j].number
+                            if n:
+                                candidates.discard(n)
+                    cell.notes = candidates
+                else:
+                    cell.notes.clear()
+                cell.update_display()
+        
+    def fill_obvious_numbers(self):
+        def buscar_y_colocar(grupos):
+            colocado = False
+            for grupo in grupos:
+                conteo = {n: [] for n in range(1, 10)}
+                for r, c in grupo:
+                    cell = self.cells[r][c]
+                    if cell.number is None:
+                        for n in cell.notes:
+                            conteo[n].append((r, c))
+                for n, posiciones in conteo.items():
+                    if len(posiciones) == 1:
+                        r, c = posiciones[0]
+                        self.history.append(self.capture_board_state())
+                        self.cells[r][c].set_number(n)
+                        colocado = True
+            return colocado
+    
+        filas    = [[(i, j) for j in range(9)] for i in range(9)]
+        columnas = [[(i, j) for i in range(9)] for j in range(9)]
+        bloques  = [[(r + i, c + j) for i in range(3) for j in range(3)]
+                    for r in (0, 3, 6) for c in (0, 3, 6)]
+    
+        changes = any(buscar_y_colocar(g) for g in (filas, columnas, bloques))
+    
+        if changes and self.error_focus:
+            self.check_conflicts()
+    
+        return changes
+    
+    def eliminate_notes(self):
+        changes = False
+        for r in range(9):
+            for c in range(9):
+                cell = self.cells[r][c]
+                if cell.number is not None:
+                    num = cell.number
+                    # Fila y columna
+                    for i in range(9):
+                        for peer in (self.cells[r][i], self.cells[i][c]):
+                            if peer != cell and num in peer.notes:
+                                peer.notes.discard(num)
+                                changes = True
+                    # Cuadro 3x3
+                    br, bc = 3 * (r//3), 3 * (c//3)
+                    for i in range(3):
+                        for j in range(3):
+                            peer = self.cells[br+i][bc+j]
+                            if peer != cell and num in peer.notes:
+                                peer.notes.discard(num)
+                                changes = True
+        return changes
+    
     def solve_sudoku(self):
-        pass  # <-- AQUÍ VA TU SOLVER COMPLETO
-
+        self.history.append(self.capture_board_state())
+        while True:
+            self.initialize_notes()
+            changed = self.fill_obvious_numbers() 
+            if not changed:
+                changed = self.eliminate_notes() 
+                if not changed:
+                    break
+        if not self.is_solved():
+            self.backtrack_solve()
+            
     def solve_step_by_step(self):
-        pass  # <-- AQUÍ VA TU SOLVER PASO A PASO
+        self.history.append(self.capture_board_state())
+        self.initialize_notes()
+        state = self.fill_obvious_numbers()
+        if not state:
+           self.eliminate_notes() 
+    
+    def get_all_units(self):
+        units = []
+        for i in range(9):
+            units.append([self.cells[i][j] for j in range(9)])  # filas
+            units.append([self.cells[j][i] for j in range(9)])  # columnas
+        for br in range(0, 9, 3):
+            for bc in range(0, 9, 3):
+                units.append([
+                    self.cells[r][c]
+                    for r in range(br, br+3)
+                    for c in range(bc, bc+3)
+                ])
+        return units
+    
+    def is_solved(self):
+        return all(cell.number is not None for row in self.cells for cell in row)
+    
+    def backtrack_solve(self):
+        # 1. Copiamos el estado actual en un tablero local con None para vacíos
+        board = [[cell.number for cell in row] for row in self.cells]
+    
+        # 2. Función que devuelve el conjunto de posibles números para (r,c)
+        def possible(b, r, c):
+            if b[r][c] is not None:
+                return set()
+            vals = set(range(1, 10))
+            # quitar fila
+            vals -= {b[r][j] for j in range(9) if b[r][j] is not None}
+            # quitar columna
+            vals -= {b[i][c] for i in range(9) if b[i][c] is not None}
+            # quitar bloque 3x3
+            br, bc = 3*(r//3), 3*(c//3)
+            vals -= {
+                b[br+i][bc+j]
+                for i in range(3) for j in range(3)
+                if b[br+i][bc+j] is not None
+            }
+            return vals
+    
+        # 3. Recursión con MRV (Minimum Remaining Values)
+        def solve():
+            # encontrar todas las celdas vacías
+            empties = [(r, c) for r in range(9) for c in range(9) if board[r][c] is None]
+            if not empties:
+                return True  # todo lleno
+            
+            # elegir la celda con menos candidatos
+            r, c = min(empties, key=lambda rc: len(possible(board, rc[0], rc[1])))
+            opts = possible(board, r, c)
+            if not opts:
+                return False  # sin opciones: backtrack
+    
+            for n in opts:
+                board[r][c] = n
+                if solve():
+                    return True
+                board[r][c] = None  # deshacer
+    
+            return False
+    
+        # 4. Lanzar el solver
+        if solve():
+            # reflejar resultado en la GUI
+            for r in range(9):
+                for c in range(9):
+                    # este set_number actualiza la celda y borra notas
+                    self.cells[r][c].set_number(board[r][c])
+        else:
+            messagebox.showinfo("Sudoku", "No se pudo resolver con backtracking optimizado.")
+
+
 
 if __name__ == "__main__":
     app = SudokuGUI()
