@@ -22,7 +22,6 @@ def is_valid_move(board, r, c, n):
                 return False
     return True
 
-
 class SudokuCell(tk.Canvas):
     def __init__(self, master, row, col):
         self.cell_size = 80
@@ -100,7 +99,6 @@ class SudokuCell(tk.Canvas):
         self.config(width=new_size, height=new_size)
         self.update_display()
 
-
 class SudokuGUI(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -123,7 +121,7 @@ class SudokuGUI(tk.Tk):
         self.menu_button = tk.Button(self.top_frame, text="← Menú", command=self.return_to_start_screen,
                                      bg=AZUL_OSCURO, fg="white", width=8)
         self.menu_button.pack(side="left", padx=10)
-        self.time_label = tk.Label(self.top_frame, text="Tiempo: 00:00", bg=AZUL_MEDIO,
+        self.time_label = tk.Label(self.top_frame, text="Tiempo: 00:00:00", bg=AZUL_MEDIO,
                                    fg="black", font=("Arial", 12))
         self.time_label.pack(side="right", padx=10)
     
@@ -166,11 +164,9 @@ class SudokuGUI(tk.Tk):
         self.restart_button.pack(side="left", padx=5)
         
         # --- Botón de menú oculto ---
-        self.solution_toggle = tk.Button(self, text="", bg=AZUL_MEDIO, relief="flat",
-                                         command=self.toggle_solution_buttons,
-                                         width=2, height=1, highlightthickness=0,
-                                         bd=0, activebackground=AZUL_OSCURO)
-    
+        self.solution_toggle = tk.Button(
+            self, text="", bg=AZUL_MEDIO, relief="flat", command=self.toggle_solution_buttons,
+            width=2, height=1, highlightthickness=0, bd=0, activebackground=AZUL_OSCURO)
         self.solution_frame = tk.Frame(self, bg=AZUL_MEDIO)
     
         # --- Eventos de teclado y resize ---
@@ -217,6 +213,37 @@ class SudokuGUI(tk.Tk):
         tk.Label(self.start_frame, textvariable=self.difficulty_label_var,
                  bg=AZUL_MEDIO, fg=AZUL_OSCURO, font=("Arial", 12)).pack(pady=(0, 10))
         
+        self.frames = {
+            "top":    self.top_frame,
+            "grid":   self.grid_frame,
+            "ctrl":   self.control_frame,
+            "action": self.action_frame,
+            "sol":    self.solution_toggle
+        }
+        
+    def hide_game(self):
+        for f in self.frames.values():
+            try: f.pack_forget()
+            except: f.place_forget()
+    
+    def show_game(self):
+        self.frames["top"].pack(fill="x", pady=(10,0))
+        self.frames["grid"].pack(pady=20)
+        self.frames["ctrl"].pack()
+        self.frames["action"].pack(pady=5)
+        self.frames["sol"].place(relx=1.0, rely=1.0, anchor="se", x=0, y=0)
+        
+    def return_to_start_screen(self):
+        if messagebox.askyesno("Confirmar", "¿Está seguro que quiere regresar al menú principal?"):
+            self.stop_timer()
+            self.hide_game()
+            self.clear_board()
+            self.start_frame.pack(expand=True)
+    
+    def show_main_interface(self):
+        self.start_frame.pack_forget()
+        self.show_game()
+
     def restart_puzzle(self):
         if self.history and messagebox.askyesno("Confirmar", "¿Reiniciar el puzzle?"):
             initial_state = self.history[0]  # El primer estado guardado
@@ -224,40 +251,18 @@ class SudokuGUI(tk.Tk):
             self.history = [initial_state]  # Reset del historial
             self.elapsed_seconds = 0
             self.update_undo_button_state()
-            self.time_label.config(text="Tiempo: 00:00")
-
-    def return_to_start_screen(self):
-        self.stop_timer()
-        self.grid_frame.pack_forget()
-        self.control_frame.pack_forget()
-        self.action_frame.pack_forget()
-        self.solution_toggle.place_forget()
-        if self.solution_visible:
-            for widget in self.solution_frame.winfo_children():
-                widget.destroy()
-            self.solution_frame.place_forget()
-            self.solution_visible = not self.solution_visible
-        self.top_frame.pack_forget()
-        self.start_frame.pack(expand=True)
-
-    def show_main_interface(self):
-        self.top_frame.pack(fill="x", pady=(10, 0))
-        self.grid_frame.pack(pady=20)
-        self.control_frame.pack()
-        self.action_frame.pack(pady=5)
-        self.solution_toggle.place(relx=1.0, rely=1.0, anchor="se", x=0, y=0)
-
-    def update_timer(self):
-        if self.timer_running:
-            mins, secs = divmod(self.elapsed_seconds, 60)
-            self.time_label.config(text=f"Tiempo: {mins:02}:{secs:02}")
-            self.elapsed_seconds += 1
-            self.after(1000, self.update_timer)
+            self.time_label.config(text="Tiempo: 00:00:00")
             
+    def _tick(self):
+        h, rem = divmod(self.elapsed_seconds, 3600)
+        m, s = divmod(rem, 60)
+        self.time_label.config(text=f"Tiempo: {h:02}:{m:02}:{s:02}")
+        self.elapsed_seconds += 1
+        self.after(1000, self._tick)
+    
     def start_timer(self):
-        self.elapsed_seconds = 0
-        self.timer_running = True
-        self.update_timer()
+        self.elapsed_seconds, self.timer_running = 0, True
+        self._tick()
     
     def stop_timer(self):
         self.timer_running = False
@@ -520,13 +525,9 @@ class SudokuGUI(tk.Tk):
             for c in range(9):
                 cell = self.cells[r][c]
                 if cell.number is None:
-                    # Empiezo con todos los números posibles
                     candidates = set(range(1, 10))
-                    # Quito los números de la fila
                     candidates -= {self.cells[r][j].number for j in range(9) if self.cells[r][j].number}
-                    # Quito los números de la columna
                     candidates -= {self.cells[i][c].number for i in range(9) if self.cells[i][c].number}
-                    # Quito los números del bloque 3×3
                     br, bc = 3*(r//3), 3*(c//3)
                     for i in range(3):
                         for j in range(3):
@@ -555,17 +556,13 @@ class SudokuGUI(tk.Tk):
                         self.cells[r][c].set_number(n)
                         colocado = True
             return colocado
-    
         filas    = [[(i, j) for j in range(9)] for i in range(9)]
         columnas = [[(i, j) for i in range(9)] for j in range(9)]
         bloques  = [[(r + i, c + j) for i in range(3) for j in range(3)]
                     for r in (0, 3, 6) for c in (0, 3, 6)]
-    
         changes = any(buscar_y_colocar(g) for g in (filas, columnas, bloques))
-    
         if changes and self.error_focus:
             self.check_conflicts()
-    
         return changes
     
     def eliminate_notes(self):
@@ -628,23 +625,22 @@ class SudokuGUI(tk.Tk):
         
     def backtrack_solve(self):
         board = [[cell.number for cell in row] for row in self.cells]
+        
         def solve():
-
             empties = [(r, c) for r in range(9) for c in range(9) if board[r][c] is None]
             if not empties:
                 return True  
             r, c = min(empties, key=lambda rc: len([
                 n for n in range(1, 10) if is_valid_move(board, rc[0], rc[1], n)
             ]))
-    
             for n in range(1, 10):
                 if is_valid_move(board, r, c, n):
                     board[r][c] = n
                     if solve():
                         return True
                     board[r][c] = None  # deshacer
-    
             return False  # backtrack
+        
         if solve():
             for r in range(9):
                 for c in range(9):
@@ -655,7 +651,7 @@ class SudokuGUI(tk.Tk):
     def generate_sudoku(self, diff):
         levels = [38, 30, 23, 17]
         revealed_count = levels[diff]
-    
+        
         def fill_board(board):
             for r in range(9):
                 for c in range(9):
@@ -673,7 +669,6 @@ class SudokuGUI(tk.Tk):
     
         full_board = [[None]*9 for _ in range(9)]
         fill_board(full_board)
-    
         revealed = set()
         while len(revealed) < revealed_count:
             revealed.add((random.randint(0, 8), random.randint(0, 8)))
