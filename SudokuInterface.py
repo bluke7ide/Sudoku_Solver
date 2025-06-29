@@ -559,7 +559,7 @@ class SudokuGUI(tk.Tk):
             # encontrar todas las celdas vacías
             empties = [(r, c) for r in range(9) for c in range(9) if board[r][c] is None]
             if not empties:
-                return True  # todo lleno
+                return True  
             
             # elegir la celda con menos candidatos
             r, c = min(empties, key=lambda rc: len(possible(board, rc[0], rc[1])))
@@ -583,7 +583,7 @@ class SudokuGUI(tk.Tk):
                     # este set_number actualiza la celda y borra notas
                     self.cells[r][c].set_number(board[r][c])
         else:
-            messagebox.showinfo("Sudoku", "No se pudo resolver con backtracking optimizado.")
+            messagebox.showinfo("Sudoku", "No se pudo resolver con backtracking optimizado, el tablero es ilegal")
 
 
 
