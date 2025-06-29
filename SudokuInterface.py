@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import pandas as pd
+import random
 
 AZUL_CLARO = "#e0f0ff"
 AZUL_MEDIO = "#99ccff"
@@ -93,13 +94,29 @@ class SudokuGUI(tk.Tk):
         super().__init__()
         self.title("Sudoku")
         self.configure(bg=AZUL_MEDIO)
-        self.geometry("600x775")
+        self.geometry("600x740")
 
         self.history = []
         self.error_focus = False
+        self.timer_running = False
+        self.elapsed_seconds = 0
 
+        # ----- Top Frame (Menú y Tiempo) -----
+        self.top_frame = tk.Frame(self, bg=AZUL_MEDIO)
+
+        self.menu_button = tk.Button(
+            self.top_frame, text="← Menú", command=self.return_to_start_screen,
+            bg=AZUL_OSCURO, fg="white", width=8
+        )
+        self.menu_button.pack(side="left", padx=10)
+
+        self.time_label = tk.Label(
+            self.top_frame, text="Tiempo: 00:00", bg=AZUL_MEDIO, fg="black", font=("Arial", 12)
+        )
+        self.time_label.pack(side="right", padx=10)
+
+        # --- Resto de frames (no los empacamos aún) ---
         self.grid_frame = tk.Frame(self, bg=AZUL_MEDIO)
-        self.grid_frame.pack(pady=20)
         self.cells = [
             [SudokuCell(self.grid_frame, r, c) for c in range(9)]
             for r in range(9)
@@ -118,10 +135,9 @@ class SudokuGUI(tk.Tk):
         self.bind_all('<Right>', lambda e: self.move_selection(0, 1))
 
         self.control_frame = tk.Frame(self, bg=AZUL_MEDIO)
-        self.control_frame.pack()
         self.mode = "number"
         self.mode_button = tk.Button(
-            self.control_frame, text="Num", width=5, height=2, 
+            self.control_frame, text="Num", width=5, height=2,
             command=self.toggle_mode,
             bg=AZUL_OSCURO, fg="white"
         )
@@ -133,13 +149,14 @@ class SudokuGUI(tk.Tk):
                 bg=AZUL_OSCURO, fg="white"
             )
             btn.pack(side="left", padx=2)
+
         self.delete_button = tk.Button(
             self.control_frame, text="Borrar", width=5, height=2,
             command=self.clear_selected_cell,
             bg=AZUL_OSCURO, fg="white"
         )
         self.delete_button.pack(side="left", padx=10)
-        
+
         self.undo_button = tk.Button(
             self.control_frame, text="Undo", width=5, height=2,
             command=self.undo_last_action,
@@ -148,29 +165,23 @@ class SudokuGUI(tk.Tk):
         self.undo_button.pack(side="left", padx=10)
 
         self.action_frame = tk.Frame(self, bg=AZUL_MEDIO)
-        self.action_frame.pack(pady=5)
-
         self.error_button = tk.Button(
             self.action_frame, text="Enfocar Errores", width=14,
             command=self.toggle_error_focus,
             bg=AZUL_OSCURO, fg="white"
         )
         self.error_button.pack(side="left", padx=5)
-        
+
         self.solution_toggle = tk.Button(
             self, text="", bg=AZUL_MEDIO, relief="flat", command=self.toggle_solution_buttons,
             width=2, height=1, highlightthickness=0, bd=0, activebackground=AZUL_OSCURO
         )
-        self.solution_toggle.place(relx=1.0, rely=1.0, anchor="se", x=0, y=0)
 
         self.solution_frame = tk.Frame(self, bg=AZUL_MEDIO)
         self.solution_visible = False
 
-
         for (label, cmd, color) in [
-            ("Cargar Partida", self.import_from_excel, AZUL_OSCURO),
             ("Guardar Partida", self.save_to_excel, AZUL_OSCURO),
-            ("Limpiar Tablero", self.confirm_clear_board, "red"),
         ]:
             b = tk.Button(self.action_frame, text=label, command=cmd,
                           bg=color, fg="white", width=14, height=1)
@@ -179,6 +190,147 @@ class SudokuGUI(tk.Tk):
         self.last_cell_size = None
         self.bind("<Configure>", self.on_resize)
         self.update_undo_button_state()
+
+        # Ocultamos interfaz principal
+        self.grid_frame.pack_forget()
+        self.control_frame.pack_forget()
+        self.action_frame.pack_forget()
+        self.solution_toggle.place_forget()
+        self.top_frame.pack_forget()
+
+        # Pantalla inicial
+        self.start_frame = tk.Frame(self, bg=AZUL_MEDIO)
+        self.start_frame.pack(expand=True)
+
+        tk.Label(self.start_frame, text="Sudoku", font=("Arial", 20),
+                 bg=AZUL_MEDIO, fg=AZUL_OSCURO).pack(pady=20)
+
+        tk.Button(self.start_frame, text="Cargar Partida", width=20, height=2,
+                  bg=AZUL_OSCURO, fg="white", command=self.start_from_file).pack(pady=10)
+        tk.Button(self.start_frame, text="Generar Sudoku", width=20, height=2,
+                  bg=AZUL_OSCURO, fg="white", command=self.generate_with_slider).pack(pady=10)
+
+        tk.Label(self.start_frame, text="Selecciona dificultad:", bg=AZUL_MEDIO, fg=AZUL_OSCURO, font=("Arial", 12)).pack(pady=(10, 0))
+
+        self.difficulty_slider = tk.Scale(
+            self.start_frame, from_=0, to=3, orient="horizontal", showvalue=False,
+            length=200, sliderlength=20, troughcolor=AZUL_CLARO, bg=AZUL_MEDIO,
+            command=self.update_difficulty_label
+        )
+        self.difficulty_slider.set(0)
+        self.difficulty_slider.pack()
+
+        self.difficulty_label_var = tk.StringVar(value="Fácil")
+        tk.Label(self.start_frame, textvariable=self.difficulty_label_var,
+                 bg=AZUL_MEDIO, fg=AZUL_OSCURO, font=("Arial", 12)).pack(pady=(0, 10))
+
+    def return_to_start_screen(self):
+        self.stop_timer()
+
+        # Ocultar toda la interfaz de juego
+        self.grid_frame.pack_forget()
+        self.control_frame.pack_forget()
+        self.action_frame.pack_forget()
+        self.solution_toggle.place_forget()
+        self.solution_frame.place_forget()
+        self.top_frame.pack_forget()
+        self.start_frame.pack(expand=True)
+
+    def show_main_interface(self):
+        self.top_frame.pack(fill="x", pady=(10, 0))
+        self.grid_frame.pack(pady=20)
+        self.control_frame.pack()
+        self.action_frame.pack(pady=5)
+        self.solution_toggle.place(relx=1.0, rely=1.0, anchor="se", x=0, y=0)
+
+    def update_timer(self):
+        if self.timer_running:
+            mins, secs = divmod(self.elapsed_seconds, 60)
+            self.time_label.config(text=f"Tiempo: {mins:02}:{secs:02}")
+            self.elapsed_seconds += 1
+            self.after(1000, self.update_timer)
+            
+    def start_timer(self):
+        self.elapsed_seconds = 0
+        self.timer_running = True
+        self.update_timer()
+    
+    def stop_timer(self):
+        self.timer_running = False
+
+    def update_difficulty_label(self, val):
+        levels = ["Fácil", "Medio", "Difícil", "Máximo"]
+        self.difficulty_label_var.set(levels[int(val)])
+    
+    def generate_with_slider(self):
+        level_map = {0: 0, 1: 1, 2: 2, 3: 3}
+        diff = level_map[self.difficulty_slider.get()]
+        self.start_frame.pack_forget()
+        self.show_main_interface()
+        self.clear_board()
+        self.generate_sudoku(diff)
+    
+    def start_from_file(self):
+        self.start_frame.pack_forget()
+        self.show_main_interface()
+        self.clear_board()
+        self.import_from_excel()
+        
+    def generate_sudoku(self, diff):
+        levels = [38, 30, 23, 17]
+        revealed_count = levels[diff]
+        def is_valid(board, r, c, n):
+            for i in range(9):
+                if board[r][i] == n or board[i][c] == n:
+                    return False
+            br, bc = 3 * (r // 3), 3 * (c // 3)
+            for i in range(3):
+                for j in range(3):
+                    if board[br+i][bc+j] == n:
+                        return False
+            return True
+    
+        def fill_board(board):
+            for r in range(9):
+                for c in range(9):
+                    if board[r][c] is None:
+                        nums = list(range(1, 10))
+                        random.shuffle(nums)
+                        for n in nums:
+                            if is_valid(board, r, c, n):
+                                board[r][c] = n
+                                if fill_board(board):
+                                    return True
+                                board[r][c] = None
+                        return False
+            return True
+    
+        # Paso 1: crear un tablero lleno válido
+        full_board = [[None for _ in range(9)] for _ in range(9)]
+        fill_board(full_board)
+    
+        # Paso 2: quitar casillas hasta que queden las deseadas
+        revealed = set()
+        while len(revealed) < revealed_count:
+            r, c = random.randint(0, 8), random.randint(0, 8)
+            revealed.add((r, c))
+    
+        # Paso 3: actualizar la GUI
+        self.history.clear()
+        for r in range(9):
+            for c in range(9):
+                cell = self.cells[r][c]
+                if (r, c) in revealed:
+                    cell.set_number(full_board[r][c])
+                else:
+                    cell.set_number(None)
+                cell.notes.clear()
+                cell.update_display()
+        if self.error_focus:
+            self.check_conflicts()
+        self.start_timer()
+        self.update_undo_button_state()
+
 
     def update_undo_button_state(self):
         if self.history:
@@ -318,17 +470,15 @@ class SudokuGUI(tk.Tk):
                 self.check_conflicts()
             self.update_undo_button_state()
 
-    def confirm_clear_board(self):
-        if messagebox.askyesno("Confirmar", "¿Borrar todo el tablero?"):
-            self.history.clear()
-            for row in self.cells:
-                for cell in row:
-                    cell.number = None
-                    cell.notes.clear()
-                    cell.update_display()
-            if self.error_focus:
-                self.check_conflicts()
-            self.update_undo_button_state()
+    def clear_board(self):
+        for row in self.cells:
+            for cell in row:
+                cell.number = None
+                cell.notes.clear()
+                cell.update_display()
+        if self.error_focus:
+            self.check_conflicts()
+        self.update_undo_button_state()
 
     def set_selected_cell(self, cell):
         if self.selected_cell:
@@ -398,6 +548,7 @@ class SudokuGUI(tk.Tk):
                     cell.update_display()
             if self.error_focus:
                 self.check_conflicts()
+            self.start_timer()
             self.update_undo_button_state()
         except Exception as e:
             messagebox.showerror("Error", "No se pudo cargar:\n" + str(e))
