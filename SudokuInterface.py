@@ -513,7 +513,10 @@ class SudokuGUI(tk.Tk):
         self.initialize_notes()
         state = self.fill_obvious_numbers()
         if not state:
-           self.eliminate_notes() 
+           state = self.eliminate_notes()
+           if not state:
+               messagebox.showinfo("Sudoku", "Aunque hayan posibles eliminaciones, se resuelve por bingo del arquero")
+               self.backtrack_solve()
     
     def get_all_units(self):
         units = []
