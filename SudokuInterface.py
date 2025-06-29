@@ -94,145 +94,126 @@ class SudokuGUI(tk.Tk):
         super().__init__()
         self.title("Sudoku")
         self.configure(bg=AZUL_MEDIO)
-        self.geometry("600x740")
-
+        self.geometry("600x775")
+    
+        # --- Variables de estado ---
         self.history = []
         self.error_focus = False
         self.timer_running = False
         self.elapsed_seconds = 0
-
-        # ----- Top Frame (Menú y Tiempo) -----
+        self.selected_cell = None
+        self.solution_visible = False
+        self.last_cell_size = None
+        self.mode = "number"
+    
+        # --- Interfaz superior (Menú y Reloj) ---
         self.top_frame = tk.Frame(self, bg=AZUL_MEDIO)
-
-        self.menu_button = tk.Button(
-            self.top_frame, text="← Menú", command=self.return_to_start_screen,
-            bg=AZUL_OSCURO, fg="white", width=8
-        )
+        self.menu_button = tk.Button(self.top_frame, text="← Menú", command=self.return_to_start_screen,
+                                     bg=AZUL_OSCURO, fg="white", width=8)
         self.menu_button.pack(side="left", padx=10)
-
-        self.time_label = tk.Label(
-            self.top_frame, text="Tiempo: 00:00", bg=AZUL_MEDIO, fg="black", font=("Arial", 12)
-        )
+        self.time_label = tk.Label(self.top_frame, text="Tiempo: 00:00", bg=AZUL_MEDIO,
+                                   fg="black", font=("Arial", 12))
         self.time_label.pack(side="right", padx=10)
-
-        # --- Resto de frames (no los empacamos aún) ---
+    
+        # --- Tablero de Sudoku ---
         self.grid_frame = tk.Frame(self, bg=AZUL_MEDIO)
-        self.cells = [
-            [SudokuCell(self.grid_frame, r, c) for c in range(9)]
-            for r in range(9)
-        ]
+        self.cells = [[SudokuCell(self.grid_frame, r, c) for c in range(9)] for r in range(9)]
         for r in range(9):
             for c in range(9):
                 self.cells[r][c].grid(row=r, column=c)
                 self.cells[r][c].update_display()
-
-        self.selected_cell = None
+    
+        # --- Controles numéricos y botones de acción ---
+        self.control_frame = tk.Frame(self, bg=AZUL_MEDIO)
+        self.mode_button = tk.Button(self.control_frame, text="Num", width=5, height=2,
+                                     command=self.toggle_mode, bg=AZUL_OSCURO, fg="white")
+        self.mode_button.pack(side="left", padx=10, pady=10)
+        for i in range(1, 10):
+            tk.Button(self.control_frame, text=str(i), width=4, height=2,
+                      command=lambda n=i: self.enter_input(n),
+                      bg=AZUL_OSCURO, fg="white").pack(side="left", padx=2)
+    
+        self.delete_button = tk.Button(self.control_frame, text="Borrar", width=5, height=2,
+                                       command=self.clear_selected_cell, bg=AZUL_OSCURO, fg="white")
+        self.delete_button.pack(side="left", padx=10)
+    
+        self.undo_button = tk.Button(self.control_frame, text="Undo", width=5, height=2,
+                                     command=self.undo_last_action,
+                                     bg=AZUL_OSCURO_DESHABILITADO, fg="white", state="disabled")
+        self.undo_button.pack(side="left", padx=10)
+    
+        # --- Botones de funciones secundarias ---
+        self.action_frame = tk.Frame(self, bg=AZUL_MEDIO)
+        self.error_button = tk.Button(self.action_frame, text="Enfocar Errores", width=14,
+                                      command=self.toggle_error_focus, bg=AZUL_OSCURO, fg="white")
+        self.error_button.pack(side="left", padx=5)
+        tk.Button(self.action_frame, text="Guardar Partida", command=self.save_to_excel,
+                  bg=AZUL_OSCURO, fg="white", width=14, height=1).pack(side="left", padx=5)
+    
+        # --- Botón de menú oculto ---
+        self.solution_toggle = tk.Button(self, text="", bg=AZUL_MEDIO, relief="flat",
+                                         command=self.toggle_solution_buttons,
+                                         width=2, height=1, highlightthickness=0,
+                                         bd=0, activebackground=AZUL_OSCURO)
+    
+        self.solution_frame = tk.Frame(self, bg=AZUL_MEDIO)
+    
+        # --- Eventos de teclado y resize ---
         self.bind_all('<Key>', self.key_input)
         self.bind_all('<Control-z>', self.undo_last_action)
         self.bind_all('<Up>', lambda e: self.move_selection(-1, 0))
         self.bind_all('<Down>', lambda e: self.move_selection(1, 0))
         self.bind_all('<Left>', lambda e: self.move_selection(0, -1))
         self.bind_all('<Right>', lambda e: self.move_selection(0, 1))
-
-        self.control_frame = tk.Frame(self, bg=AZUL_MEDIO)
-        self.mode = "number"
-        self.mode_button = tk.Button(
-            self.control_frame, text="Num", width=5, height=2,
-            command=self.toggle_mode,
-            bg=AZUL_OSCURO, fg="white"
-        )
-        self.mode_button.pack(side="left", padx=10, pady=10)
-        for i in range(1, 10):
-            btn = tk.Button(
-                self.control_frame, text=str(i), width=4, height=2,
-                command=lambda n=i: self.enter_input(n),
-                bg=AZUL_OSCURO, fg="white"
-            )
-            btn.pack(side="left", padx=2)
-
-        self.delete_button = tk.Button(
-            self.control_frame, text="Borrar", width=5, height=2,
-            command=self.clear_selected_cell,
-            bg=AZUL_OSCURO, fg="white"
-        )
-        self.delete_button.pack(side="left", padx=10)
-
-        self.undo_button = tk.Button(
-            self.control_frame, text="Undo", width=5, height=2,
-            command=self.undo_last_action,
-            bg=AZUL_OSCURO_DESHABILITADO, fg="white", state="disabled"
-        )
-        self.undo_button.pack(side="left", padx=10)
-
-        self.action_frame = tk.Frame(self, bg=AZUL_MEDIO)
-        self.error_button = tk.Button(
-            self.action_frame, text="Enfocar Errores", width=14,
-            command=self.toggle_error_focus,
-            bg=AZUL_OSCURO, fg="white"
-        )
-        self.error_button.pack(side="left", padx=5)
-
-        self.solution_toggle = tk.Button(
-            self, text="", bg=AZUL_MEDIO, relief="flat", command=self.toggle_solution_buttons,
-            width=2, height=1, highlightthickness=0, bd=0, activebackground=AZUL_OSCURO
-        )
-
-        self.solution_frame = tk.Frame(self, bg=AZUL_MEDIO)
-        self.solution_visible = False
-
-        for (label, cmd, color) in [
-            ("Guardar Partida", self.save_to_excel, AZUL_OSCURO),
-        ]:
-            b = tk.Button(self.action_frame, text=label, command=cmd,
-                          bg=color, fg="white", width=14, height=1)
-            b.pack(side="left", padx=5)
-
-        self.last_cell_size = None
         self.bind("<Configure>", self.on_resize)
-        self.update_undo_button_state()
-
-        # Ocultamos interfaz principal
+    
+        # --- Ocultar todo al iniciar ---
         self.grid_frame.pack_forget()
         self.control_frame.pack_forget()
         self.action_frame.pack_forget()
         self.solution_toggle.place_forget()
         self.top_frame.pack_forget()
-
-        # Pantalla inicial
+        self.update_undo_button_state()
+    
+        # --- Pantalla inicial ---
         self.start_frame = tk.Frame(self, bg=AZUL_MEDIO)
         self.start_frame.pack(expand=True)
-
+    
         tk.Label(self.start_frame, text="Sudoku", font=("Arial", 20),
                  bg=AZUL_MEDIO, fg=AZUL_OSCURO).pack(pady=20)
-
+    
         tk.Button(self.start_frame, text="Cargar Partida", width=20, height=2,
                   bg=AZUL_OSCURO, fg="white", command=self.start_from_file).pack(pady=10)
+    
         tk.Button(self.start_frame, text="Generar Sudoku", width=20, height=2,
                   bg=AZUL_OSCURO, fg="white", command=self.generate_with_slider).pack(pady=10)
-
-        tk.Label(self.start_frame, text="Selecciona dificultad:", bg=AZUL_MEDIO, fg=AZUL_OSCURO, font=("Arial", 12)).pack(pady=(10, 0))
-
-        self.difficulty_slider = tk.Scale(
-            self.start_frame, from_=0, to=3, orient="horizontal", showvalue=False,
-            length=200, sliderlength=20, troughcolor=AZUL_CLARO, bg=AZUL_MEDIO,
-            command=self.update_difficulty_label
-        )
+    
+        tk.Label(self.start_frame, text="Selecciona dificultad:", bg=AZUL_MEDIO,
+                 fg=AZUL_OSCURO, font=("Arial", 12)).pack(pady=(10, 0))
+    
+        self.difficulty_slider = tk.Scale(self.start_frame, from_=0, to=3, orient="horizontal",
+                                          showvalue=False, length=200, sliderlength=20,
+                                          troughcolor=AZUL_CLARO, bg=AZUL_MEDIO,
+                                          command=self.update_difficulty_label)
         self.difficulty_slider.set(0)
         self.difficulty_slider.pack()
-
+    
         self.difficulty_label_var = tk.StringVar(value="Fácil")
         tk.Label(self.start_frame, textvariable=self.difficulty_label_var,
                  bg=AZUL_MEDIO, fg=AZUL_OSCURO, font=("Arial", 12)).pack(pady=(0, 10))
 
+
     def return_to_start_screen(self):
         self.stop_timer()
-
-        # Ocultar toda la interfaz de juego
         self.grid_frame.pack_forget()
         self.control_frame.pack_forget()
         self.action_frame.pack_forget()
         self.solution_toggle.place_forget()
-        self.solution_frame.place_forget()
+        if self.solution_visible:
+            for widget in self.solution_frame.winfo_children():
+                widget.destroy()
+            self.solution_frame.place_forget()
+            self.solution_visible = not self.solution_visible
         self.top_frame.pack_forget()
         self.start_frame.pack(expand=True)
 
@@ -655,9 +636,8 @@ class SudokuGUI(tk.Tk):
             if not changed:
                 changed = self.eliminate_notes() 
                 if not changed:
+                    self.backtrack_solve()
                     break
-        if not self.is_solved():
-            self.backtrack_solve()
             
     def solve_step_by_step(self):
         self.history.append(self.capture_board_state())
@@ -683,23 +663,14 @@ class SudokuGUI(tk.Tk):
                 ])
         return units
     
-    def is_solved(self):
-        return all(cell.number is not None for row in self.cells for cell in row)
-    
     def backtrack_solve(self):
-        # 1. Copiamos el estado actual en un tablero local con None para vacíos
         board = [[cell.number for cell in row] for row in self.cells]
-    
-        # 2. Función que devuelve el conjunto de posibles números para (r,c)
         def possible(b, r, c):
             if b[r][c] is not None:
                 return set()
             vals = set(range(1, 10))
-            # quitar fila
             vals -= {b[r][j] for j in range(9) if b[r][j] is not None}
-            # quitar columna
             vals -= {b[i][c] for i in range(9) if b[i][c] is not None}
-            # quitar bloque 3x3
             br, bc = 3*(r//3), 3*(c//3)
             vals -= {
                 b[br+i][bc+j]
@@ -708,14 +679,11 @@ class SudokuGUI(tk.Tk):
             }
             return vals
     
-        # 3. Recursión con MRV (Minimum Remaining Values)
         def solve():
-            # encontrar todas las celdas vacías
             empties = [(r, c) for r in range(9) for c in range(9) if board[r][c] is None]
             if not empties:
                 return True  
             
-            # elegir la celda con menos candidatos
             r, c = min(empties, key=lambda rc: len(possible(board, rc[0], rc[1])))
             opts = possible(board, r, c)
             if not opts:
@@ -729,17 +697,12 @@ class SudokuGUI(tk.Tk):
     
             return False
     
-        # 4. Lanzar el solver
         if solve():
-            # reflejar resultado en la GUI
             for r in range(9):
                 for c in range(9):
-                    # este set_number actualiza la celda y borra notas
                     self.cells[r][c].set_number(board[r][c])
         else:
             messagebox.showinfo("Sudoku", "No se pudo resolver con backtracking optimizado, el tablero es ilegal")
-
-
 
 if __name__ == "__main__":
     app = SudokuGUI()
