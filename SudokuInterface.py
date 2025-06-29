@@ -11,6 +11,18 @@ NEGRO = "black"
 GRIS_CLARO = "#cccccc"
 ROJO = "red"
 
+def is_valid_move(board, r, c, n):
+    for i in range(9):
+        if board[r][i] == n or board[i][c] == n:
+            return False
+    br, bc = 3 * (r // 3), 3 * (c // 3)
+    for i in range(3):
+        for j in range(3):
+            if board[br + i][bc + j] == n:
+                return False
+    return True
+
+
 class SudokuCell(tk.Canvas):
     def __init__(self, master, row, col):
         self.cell_size = 80
@@ -149,7 +161,10 @@ class SudokuGUI(tk.Tk):
         self.error_button.pack(side="left", padx=5)
         tk.Button(self.action_frame, text="Guardar Partida", command=self.save_to_excel,
                   bg=AZUL_OSCURO, fg="white", width=14, height=1).pack(side="left", padx=5)
-    
+        self.restart_button = tk.Button(self.action_frame, text="Reiniciar Puzzle", width=14, 
+                  command=self.restart_puzzle,bg=AZUL_OSCURO, fg="white")
+        self.restart_button.pack(side="left", padx=5)
+        
         # --- Botón de menú oculto ---
         self.solution_toggle = tk.Button(self, text="", bg=AZUL_MEDIO, relief="flat",
                                          command=self.toggle_solution_buttons,
@@ -201,7 +216,15 @@ class SudokuGUI(tk.Tk):
         self.difficulty_label_var = tk.StringVar(value="Fácil")
         tk.Label(self.start_frame, textvariable=self.difficulty_label_var,
                  bg=AZUL_MEDIO, fg=AZUL_OSCURO, font=("Arial", 12)).pack(pady=(0, 10))
-
+        
+    def restart_puzzle(self):
+        if self.history and messagebox.askyesno("Confirmar", "¿Reiniciar el puzzle?"):
+            initial_state = self.history[0]  # El primer estado guardado
+            self.restore_board_state(initial_state)
+            self.history = [initial_state]  # Reset del historial
+            self.elapsed_seconds = 0
+            self.update_undo_button_state()
+            self.time_label.config(text="Tiempo: 00:00")
 
     def return_to_start_screen(self):
         self.stop_timer()
@@ -256,62 +279,6 @@ class SudokuGUI(tk.Tk):
         self.show_main_interface()
         self.clear_board()
         self.import_from_excel()
-        
-    def generate_sudoku(self, diff):
-        levels = [38, 30, 23, 17]
-        revealed_count = levels[diff]
-        def is_valid(board, r, c, n):
-            for i in range(9):
-                if board[r][i] == n or board[i][c] == n:
-                    return False
-            br, bc = 3 * (r // 3), 3 * (c // 3)
-            for i in range(3):
-                for j in range(3):
-                    if board[br+i][bc+j] == n:
-                        return False
-            return True
-    
-        def fill_board(board):
-            for r in range(9):
-                for c in range(9):
-                    if board[r][c] is None:
-                        nums = list(range(1, 10))
-                        random.shuffle(nums)
-                        for n in nums:
-                            if is_valid(board, r, c, n):
-                                board[r][c] = n
-                                if fill_board(board):
-                                    return True
-                                board[r][c] = None
-                        return False
-            return True
-    
-        # Paso 1: crear un tablero lleno válido
-        full_board = [[None for _ in range(9)] for _ in range(9)]
-        fill_board(full_board)
-    
-        # Paso 2: quitar casillas hasta que queden las deseadas
-        revealed = set()
-        while len(revealed) < revealed_count:
-            r, c = random.randint(0, 8), random.randint(0, 8)
-            revealed.add((r, c))
-    
-        # Paso 3: actualizar la GUI
-        self.history.clear()
-        for r in range(9):
-            for c in range(9):
-                cell = self.cells[r][c]
-                if (r, c) in revealed:
-                    cell.set_number(full_board[r][c])
-                else:
-                    cell.set_number(None)
-                cell.notes.clear()
-                cell.update_display()
-        if self.error_focus:
-            self.check_conflicts()
-        self.start_timer()
-        self.update_undo_button_state()
-
 
     def update_undo_button_state(self):
         if self.history:
@@ -549,10 +516,6 @@ class SudokuGUI(tk.Tk):
             messagebox.showerror("Error", "No se pudo guardar:\n" + str(e))
         
     def initialize_notes(self):
-        """
-        Para cada celda vacía, calcula sus candidatos (notas)
-        eliminando los números ya presentes en su fila, columna y bloque 3×3.
-        """
         for r in range(9):
             for c in range(9):
                 cell = self.cells[r][c]
@@ -662,48 +625,72 @@ class SudokuGUI(tk.Tk):
                     for c in range(bc, bc+3)
                 ])
         return units
-    
+        
     def backtrack_solve(self):
         board = [[cell.number for cell in row] for row in self.cells]
-        def possible(b, r, c):
-            if b[r][c] is not None:
-                return set()
-            vals = set(range(1, 10))
-            vals -= {b[r][j] for j in range(9) if b[r][j] is not None}
-            vals -= {b[i][c] for i in range(9) if b[i][c] is not None}
-            br, bc = 3*(r//3), 3*(c//3)
-            vals -= {
-                b[br+i][bc+j]
-                for i in range(3) for j in range(3)
-                if b[br+i][bc+j] is not None
-            }
-            return vals
-    
         def solve():
+
             empties = [(r, c) for r in range(9) for c in range(9) if board[r][c] is None]
             if not empties:
                 return True  
-            
-            r, c = min(empties, key=lambda rc: len(possible(board, rc[0], rc[1])))
-            opts = possible(board, r, c)
-            if not opts:
-                return False  # sin opciones: backtrack
+            r, c = min(empties, key=lambda rc: len([
+                n for n in range(1, 10) if is_valid_move(board, rc[0], rc[1], n)
+            ]))
     
-            for n in opts:
-                board[r][c] = n
-                if solve():
-                    return True
-                board[r][c] = None  # deshacer
+            for n in range(1, 10):
+                if is_valid_move(board, r, c, n):
+                    board[r][c] = n
+                    if solve():
+                        return True
+                    board[r][c] = None  # deshacer
     
-            return False
-    
+            return False  # backtrack
         if solve():
             for r in range(9):
                 for c in range(9):
                     self.cells[r][c].set_number(board[r][c])
         else:
-            messagebox.showinfo("Sudoku", "No se pudo resolver con backtracking optimizado, el tablero es ilegal")
-
+            messagebox.showinfo("Sudoku", "No se pudo resolver: tablero ilegal o sin solución.")
+            
+    def generate_sudoku(self, diff):
+        levels = [38, 30, 23, 17]
+        revealed_count = levels[diff]
+    
+        def fill_board(board):
+            for r in range(9):
+                for c in range(9):
+                    if board[r][c] is None:
+                        nums = list(range(1, 10))
+                        random.shuffle(nums)
+                        for n in nums:
+                            if is_valid_move(board, r, c, n):
+                                board[r][c] = n
+                                if fill_board(board):
+                                    return True
+                                board[r][c] = None
+                        return False
+            return True
+    
+        full_board = [[None]*9 for _ in range(9)]
+        fill_board(full_board)
+    
+        revealed = set()
+        while len(revealed) < revealed_count:
+            revealed.add((random.randint(0, 8), random.randint(0, 8)))
+    
+        self.history.clear()
+        for r in range(9):
+            for c in range(9):
+                val = full_board[r][c] if (r, c) in revealed else None
+                self.cells[r][c].set_number(val)
+                self.cells[r][c].notes.clear()
+                self.cells[r][c].update_display()
+    
+        if self.error_focus:
+            self.check_conflicts()
+        self.start_timer()
+        self.update_undo_button_state()
+        
 if __name__ == "__main__":
     app = SudokuGUI()
     app.mainloop()
