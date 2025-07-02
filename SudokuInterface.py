@@ -239,6 +239,11 @@ class SudokuGUI(tk.Tk):
             self.hide_game()
             self.clear_board()
             self.start_frame.pack(expand=True)
+            if self.solution_visible:
+                for widget in self.solution_frame.winfo_children():
+                    widget.destroy()
+                self.solution_frame.place_forget()
+                self.solution_visible = not self.solution_visible
     
     def show_main_interface(self):
         self.start_frame.pack_forget()
