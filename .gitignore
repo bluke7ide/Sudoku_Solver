@@ -2,3 +2,5 @@
 .Rhistory
 .RData
 .Ruserdata
+/.spyproject
+/__pycache__
