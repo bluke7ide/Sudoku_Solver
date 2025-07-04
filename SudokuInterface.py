@@ -256,7 +256,7 @@ class SudokuGUI(tk.Tk):
         self.control_frame = tk.Frame(self, bg=AZUL_MEDIO)
         self.mode_button = tk.Button(self.control_frame, text="Num", width=5, height=2,
                                      command=self.toggle_mode, bg=AZUL_OSCURO, fg="white")
-        self.mode_button.pack(side="left", padx=10, pady=10)
+        self.mode_button.pack(side="left", padx=10, pady=0)
         for i in range(1, 10):
             tk.Button(self.control_frame, text=str(i), width=4, height=2,
                       command=lambda n=i: self.enter_input(n),
