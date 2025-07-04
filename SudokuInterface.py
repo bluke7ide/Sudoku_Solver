@@ -12,6 +12,18 @@ GRIS_CLARO = "#cccccc"
 ROJO = "red"
 
 def is_valid_move(board, r, c, n):
+    """
+    Verifica si un número puede colocarse en una celda del tablero sin violar las reglas del Sudoku.
+
+    Parámetros:
+        board (list[list[int]]): Tablero 9x9 de Sudoku.
+        r (int): Fila de la celda.
+        c (int): Columna de la celda.
+        n (int): Número a validar.
+
+    Returns:
+        bool: True si el movimiento es válido, False en caso contrario.
+    """
     for i in range(9):
         if board[r][i] == n or board[i][c] == n:
             return False
@@ -22,8 +34,31 @@ def is_valid_move(board, r, c, n):
                 return False
     return True
 
+
 class SudokuCell(tk.Canvas):
+    """
+    Representa una celda de Sudoku en una interfaz gráfica con notas y valores.
+
+    Atributos:
+        row (int): Fila de la celda en el tablero.
+        col (int): Columna de la celda en el tablero.
+        number (int or None): Número asignado a la celda, o None si está vacía.
+        notes (set[int]): Conjunto de notas (posibles números) en la celda.
+        selected (bool): Indica si la celda está seleccionada.
+        error (bool): Indica si hay un error en el número asignado.
+        error_notes (set[int]): Notas que están marcadas como erróneas.
+        cell_size (int): Tamaño visual de la celda.
+    """
+
     def __init__(self, master, row, col):
+        """
+        Inicializa la celda del Sudoku con coordenadas dadas.
+
+        Parámetros:
+            master (tk.Widget): Contenedor padre.
+            row (int): Índice de fila.
+            col (int): Índice de columna.
+        """
         self.cell_size = 80
         super().__init__(master, width=self.cell_size, height=self.cell_size,
                          bg=AZUL_CLARO, highlightthickness=0)
@@ -36,6 +71,9 @@ class SudokuCell(tk.Canvas):
         self.bind("<Button-1>", self.select_cell)
 
     def update_display(self):
+        """
+        Redibuja la celda visualmente según su estado actual (número, notas, selección, error).
+        """
         self.delete("all")
         s, lw, thw = self.cell_size, 1, 3
 
@@ -61,29 +99,47 @@ class SudokuCell(tk.Canvas):
         else:
             nfs = max(int(s * 0.1), 6)
             for val in self.notes:
-                rr, cc = divmod(val-1, 3)
-                x = s*0.25 + cc*(s*0.25)
-                y = s*0.25 + rr*(s*0.25)
+                rr, cc = divmod(val - 1, 3)
+                x = s * 0.25 + cc * (s * 0.25)
+                y = s * 0.25 + rr * (s * 0.25)
                 color = ROJO if val in self.error_notes else AZUL_OSCURO
                 self.create_text(x, y, text=str(val),
                                  font=("Arial", nfs), fill=color)
 
         if self.selected:
             m = s * 0.025
-            self.create_rectangle(m, m, s-m, s-m, outline="blue", width=3)
+            self.create_rectangle(m, m, s - m, s - m, outline="blue", width=3)
 
         if self.error:
             self.create_rectangle(0, 0, s, s, outline=ROJO, width=3)
 
     def select_cell(self, event=None):
+        """
+        Llama al método del contenedor para establecer esta celda como seleccionada.
+
+        Parámetros:
+            event: Evento de clic, no usado explícitamente.
+        """
         self.master.master.set_selected_cell(self)
 
     def set_number(self, num):
+        """
+        Asigna un número a la celda y borra las notas.
+
+        Parámetros:
+            num (int): Número a asignar.
+        """
         self.number = num
         self.notes.clear()
         self.update_display()
 
     def toggle_note(self, num):
+        """
+        Agrega o elimina una nota de la celda.
+
+        Parámetros:
+            num (int): Número a alternar en las notas.
+        """
         if num in self.notes:
             self.notes.remove(num)
         else:
@@ -91,22 +147,84 @@ class SudokuCell(tk.Canvas):
         self.update_display()
 
     def set_selected(self, sel):
+        """
+        Establece el estado de selección de la celda.
+
+        Parámetros:
+            sel (bool): True si está seleccionada, False si no.
+        """
         self.selected = sel
         self.update_display()
 
     def resize(self, new_size):
+        """
+        Cambia el tamaño visual de la celda.
+
+        Parámetros:
+            new_size (int): Nuevo tamaño en píxeles.
+        """
         self.cell_size = new_size
         self.config(width=new_size, height=new_size)
         self.update_display()
 
+    def get_number(self):
+        """
+        Obtiene el número actual de la celda.
+
+        Returns:
+            int or None: Número asignado o None si está vacía.
+        """
+        return self.number
+
+    def get_notes(self):
+        """
+        Obtiene las notas actuales de la celda.
+
+        Returns:
+            set[int]: Conjunto de notas posibles.
+        """
+        return self.notes
+
+    def __str__(self):
+        """
+        Representación en cadena de la celda.
+
+        Returns:
+            str: Estado de la celda como texto.
+        """
+        return f"Cell({self.row},{self.col}): Number={self.number}, Notes={sorted(self.notes)}"
+
 class SudokuGUI(tk.Tk):
+    """
+    Clase principal que representa la interfaz gráfica del juego Sudoku.
+
+    Hereda de:
+        tk.Tk: Ventana principal de tkinter.
+
+    Atributos:
+        history (list): Historial de estados del tablero para deshacer acciones.
+        error_focus (bool): Si está activado el enfoque en errores.
+        timer_running (bool): Si el cronómetro está activo.
+        elapsed_seconds (int): Tiempo transcurrido en segundos.
+        selected_cell (SudokuCell): Celda actualmente seleccionada.
+        solution_visible (bool): Si el menú de solución está visible.
+        last_cell_size (int or None): Último tamaño aplicado a las celdas.
+        mode (str): Modo actual de entrada, puede ser "number" o "note".
+        cells (list[list[SudokuCell]]): Matriz 9x9 de celdas del tablero.
+        frames (dict): Diccionario de los frames activos ("top", "grid", etc.).
+    """
+
     def __init__(self):
+        """
+        Inicializa la ventana de Sudoku con todos los componentes de la interfaz:
+        tablero, controles, menú, cronómetro, etc.
+        """
         super().__init__()
         self.title("Sudoku")
         self.configure(bg=AZUL_MEDIO)
         self.geometry("600x775")
-    
-        # --- Variables de estado ---
+
+        # Estado del juego
         self.history = []
         self.error_focus = False
         self.timer_running = False
@@ -115,25 +233,26 @@ class SudokuGUI(tk.Tk):
         self.solution_visible = False
         self.last_cell_size = None
         self.mode = "number"
-    
-        # --- Interfaz superior (Menú y Reloj) ---
+
+        # --- Frame superior (menú y reloj) ---
         self.top_frame = tk.Frame(self, bg=AZUL_MEDIO)
         self.menu_button = tk.Button(self.top_frame, text="← Menú", command=self.return_to_start_screen,
                                      bg=AZUL_OSCURO, fg="white", width=8)
         self.menu_button.pack(side="left", padx=10)
+
         self.time_label = tk.Label(self.top_frame, text="Tiempo: 00:00:00", bg=AZUL_MEDIO,
                                    fg="black", font=("Arial", 12))
         self.time_label.pack(side="right", padx=10)
-    
-        # --- Tablero de Sudoku ---
+
+        # --- Tablero Sudoku ---
         self.grid_frame = tk.Frame(self, bg=AZUL_MEDIO)
         self.cells = [[SudokuCell(self.grid_frame, r, c) for c in range(9)] for r in range(9)]
         for r in range(9):
             for c in range(9):
                 self.cells[r][c].grid(row=r, column=c)
                 self.cells[r][c].update_display()
-    
-        # --- Controles numéricos y botones de acción ---
+
+        # --- Controles principales ---
         self.control_frame = tk.Frame(self, bg=AZUL_MEDIO)
         self.mode_button = tk.Button(self.control_frame, text="Num", width=5, height=2,
                                      command=self.toggle_mode, bg=AZUL_OSCURO, fg="white")
@@ -142,17 +261,17 @@ class SudokuGUI(tk.Tk):
             tk.Button(self.control_frame, text=str(i), width=4, height=2,
                       command=lambda n=i: self.enter_input(n),
                       bg=AZUL_OSCURO, fg="white").pack(side="left", padx=2)
-    
+
         self.delete_button = tk.Button(self.control_frame, text="Borrar", width=5, height=2,
                                        command=self.clear_selected_cell, bg=AZUL_OSCURO, fg="white")
         self.delete_button.pack(side="left", padx=10)
-    
+
         self.undo_button = tk.Button(self.control_frame, text="Undo", width=5, height=2,
                                      command=self.undo_last_action,
                                      bg=AZUL_OSCURO_DESHABILITADO, fg="white", state="disabled")
         self.undo_button.pack(side="left", padx=10)
-    
-        # --- Botones de funciones secundarias ---
+
+        # --- Botones secundarios ---
         self.action_frame = tk.Frame(self, bg=AZUL_MEDIO)
         self.error_button = tk.Button(self.action_frame, text="Enfocar Errores", width=14,
                                       command=self.toggle_error_focus, bg=AZUL_OSCURO, fg="white")
@@ -160,16 +279,16 @@ class SudokuGUI(tk.Tk):
         tk.Button(self.action_frame, text="Guardar Partida", command=self.save_to_excel,
                   bg=AZUL_OSCURO, fg="white", width=14, height=1).pack(side="left", padx=5)
         self.restart_button = tk.Button(self.action_frame, text="Reiniciar Puzzle", width=14, 
-                  command=self.restart_puzzle,bg=AZUL_OSCURO, fg="white")
+                                        command=self.restart_puzzle, bg=AZUL_OSCURO, fg="white")
         self.restart_button.pack(side="left", padx=5)
-        
-        # --- Botón de menú oculto ---
+
+        # --- Botón oculto para el menú de solución ---
         self.solution_toggle = tk.Button(
             self, text="", bg=AZUL_MEDIO, relief="flat", command=self.toggle_solution_buttons,
             width=2, height=1, highlightthickness=0, bd=0, activebackground=AZUL_OSCURO)
         self.solution_frame = tk.Frame(self, bg=AZUL_MEDIO)
-    
-        # --- Eventos de teclado y resize ---
+
+        # --- Eventos ---
         self.bind_all('<Key>', self.key_input)
         self.bind_all('<Control-z>', self.undo_last_action)
         self.bind_all('<Up>', lambda e: self.move_selection(-1, 0))
@@ -177,42 +296,43 @@ class SudokuGUI(tk.Tk):
         self.bind_all('<Left>', lambda e: self.move_selection(0, -1))
         self.bind_all('<Right>', lambda e: self.move_selection(0, 1))
         self.bind("<Configure>", self.on_resize)
-    
-        # --- Ocultar todo al iniciar ---
+
+        # --- Ocultar juego al inicio ---
         self.grid_frame.pack_forget()
         self.control_frame.pack_forget()
         self.action_frame.pack_forget()
         self.solution_toggle.place_forget()
         self.top_frame.pack_forget()
         self.update_undo_button_state()
-    
+
         # --- Pantalla inicial ---
         self.start_frame = tk.Frame(self, bg=AZUL_MEDIO)
         self.start_frame.pack(expand=True)
-    
         tk.Label(self.start_frame, text="Sudoku", font=("Arial", 20),
-                 bg=AZUL_MEDIO, fg=AZUL_OSCURO).pack(pady=20)
-    
+                 bg=AZUL_MEDIO, fg=AZUL_OSCURO).pack(pady=0)
+        tk.Label(self.start_frame, text="by Luis Fer. Amey", font=("Arial", 10),
+                 bg=AZUL_MEDIO, fg=AZUL_OSCURO).pack(pady=0)
+
         tk.Button(self.start_frame, text="Cargar Partida", width=20, height=2,
                   bg=AZUL_OSCURO, fg="white", command=self.start_from_file).pack(pady=10)
-    
+
         tk.Button(self.start_frame, text="Generar Sudoku", width=20, height=2,
                   bg=AZUL_OSCURO, fg="white", command=self.generate_with_slider).pack(pady=10)
-    
+
         tk.Label(self.start_frame, text="Selecciona dificultad:", bg=AZUL_MEDIO,
                  fg=AZUL_OSCURO, font=("Arial", 12)).pack(pady=(10, 0))
-    
+
         self.difficulty_slider = tk.Scale(self.start_frame, from_=0, to=3, orient="horizontal",
                                           showvalue=False, length=200, sliderlength=20,
                                           troughcolor=AZUL_CLARO, bg=AZUL_MEDIO,
                                           command=self.update_difficulty_label)
         self.difficulty_slider.set(0)
         self.difficulty_slider.pack()
-    
+
         self.difficulty_label_var = tk.StringVar(value="Fácil")
         tk.Label(self.start_frame, textvariable=self.difficulty_label_var,
                  bg=AZUL_MEDIO, fg=AZUL_OSCURO, font=("Arial", 12)).pack(pady=(0, 10))
-        
+
         self.frames = {
             "top":    self.top_frame,
             "grid":   self.grid_frame,
@@ -222,18 +342,23 @@ class SudokuGUI(tk.Tk):
         }
         
     def hide_game(self):
+        """Oculta todos los componentes visuales del juego (tablero, controles, etc.)."""
         for f in self.frames.values():
-            try: f.pack_forget()
-            except: f.place_forget()
+            try:
+                f.pack_forget()
+            except:
+                f.place_forget()
     
     def show_game(self):
-        self.frames["top"].pack(fill="x", pady=(10,0))
+        """Muestra todos los componentes visuales del juego (tablero, menú, controles, etc.)."""
+        self.frames["top"].pack(fill="x", pady=(10, 0))
         self.frames["grid"].pack(pady=20)
         self.frames["ctrl"].pack()
         self.frames["action"].pack(pady=5)
         self.frames["sol"].place(relx=1.0, rely=1.0, anchor="se", x=0, y=0)
-        
+    
     def return_to_start_screen(self):
+        """Regresa al menú principal, detiene el tiempo y limpia el tablero."""
         if messagebox.askyesno("Confirmar", "¿Está seguro que quiere regresar al menú principal?"):
             self.stop_timer()
             self.hide_game()
@@ -243,22 +368,25 @@ class SudokuGUI(tk.Tk):
                 for widget in self.solution_frame.winfo_children():
                     widget.destroy()
                 self.solution_frame.place_forget()
-                self.solution_visible = not self.solution_visible
+                self.solution_visible = False
     
     def show_main_interface(self):
+        """Oculta la pantalla inicial y muestra la interfaz principal del juego."""
         self.start_frame.pack_forget()
         self.show_game()
-
+    
     def restart_puzzle(self):
+        """Reinicia el tablero al estado inicial guardado en el historial."""
         if self.history and messagebox.askyesno("Confirmar", "¿Reiniciar el puzzle?"):
-            initial_state = self.history[0]  # El primer estado guardado
+            initial_state = self.history[0]
             self.restore_board_state(initial_state)
-            self.history = [initial_state]  # Reset del historial
+            self.history = [initial_state]
             self.elapsed_seconds = 0
             self.update_undo_button_state()
             self.time_label.config(text="Tiempo: 00:00:00")
-            
+    
     def _tick(self):
+        """Función interna para actualizar el reloj cada segundo."""
         h, rem = divmod(self.elapsed_seconds, 3600)
         m, s = divmod(rem, 60)
         self.time_label.config(text=f"Tiempo: {h:02}:{m:02}:{s:02}")
@@ -266,17 +394,21 @@ class SudokuGUI(tk.Tk):
         self.after(1000, self._tick)
     
     def start_timer(self):
+        """Inicia el cronómetro desde cero."""
         self.elapsed_seconds, self.timer_running = 0, True
         self._tick()
     
     def stop_timer(self):
+        """Detiene el cronómetro."""
         self.timer_running = False
-
+    
     def update_difficulty_label(self, val):
+        """Actualiza el texto del nivel de dificultad según el valor del slider."""
         levels = ["Fácil", "Medio", "Difícil", "Máximo"]
         self.difficulty_label_var.set(levels[int(val)])
     
     def generate_with_slider(self):
+        """Genera un nuevo Sudoku con la dificultad seleccionada desde el slider."""
         level_map = {0: 0, 1: 1, 2: 2, 3: 3}
         diff = level_map[self.difficulty_slider.get()]
         self.start_frame.pack_forget()
@@ -285,24 +417,35 @@ class SudokuGUI(tk.Tk):
         self.generate_sudoku(diff)
     
     def start_from_file(self):
+        """Carga una partida guardada desde un archivo Excel."""
         self.start_frame.pack_forget()
         self.show_main_interface()
         self.clear_board()
         self.import_from_excel()
-
+    
     def update_undo_button_state(self):
+        """Actualiza el estado (habilitado o no) del botón Undo según el historial."""
         if self.history:
             self.undo_button.config(state="normal", bg=AZUL_OSCURO)
         else:
             self.undo_button.config(state="disabled", bg=AZUL_OSCURO_DESHABILITADO)
-
+    
     def capture_board_state(self):
-        return [
-            [(cell.number, set(cell.notes)) for cell in row]
-            for row in self.cells
-        ]
-
+        """
+        Captura el estado actual del tablero.
+    
+        Returns:
+            list: Lista de listas con tuplas (número, conjunto de notas).
+        """
+        return [[(cell.number, set(cell.notes)) for cell in row] for row in self.cells]
+    
     def restore_board_state(self, state):
+        """
+        Restaura el tablero a un estado guardado.
+    
+        Args:
+            state (list): Estado previamente capturado con capture_board_state().
+        """
         for i in range(9):
             for j in range(9):
                 num, notes = state[i][j]
@@ -313,15 +456,18 @@ class SudokuGUI(tk.Tk):
         if self.error_focus:
             self.check_conflicts()
         self.update_undo_button_state()
-
+    
     def undo_last_action(self, event=None):
+        """Deshace la última acción realizada."""
         if self.history:
             last = self.history.pop()
             self.restore_board_state(last)
-
+    
     def on_resize(self, event):
+        """Redimensiona las celdas dinámicamente al cambiar el tamaño de la ventana."""
         w, h = self.winfo_width(), self.winfo_height()
-        if w < 300 or h < 350: return
+        if w < 300 or h < 350:
+            return
         m_w, m_h = 40, 150
         new_size = int(min((w - m_w) / 9, (h - m_h) / 9))
         new_size = max(40, min(new_size, 120))
@@ -330,8 +476,9 @@ class SudokuGUI(tk.Tk):
             for row in self.cells:
                 for cell in row:
                     cell.resize(new_size)
-                    
+    
     def toggle_solution_buttons(self):
+        """Muestra u oculta el panel con botones para resolver el Sudoku."""
         if self.solution_visible:
             for widget in self.solution_frame.winfo_children():
                 widget.destroy()
@@ -339,41 +486,43 @@ class SudokuGUI(tk.Tk):
         else:
             self.solve_button = tk.Button(
                 self.solution_frame, text="Resolver Sudoku", bg=AZUL_OSCURO, fg="white",
-                command=self.solve_sudoku
-            )
+                command=self.solve_sudoku)
             self.solve_button.pack(pady=5)
-
+    
             self.step_button = tk.Button(
                 self.solution_frame, text="Paso a paso", bg=AZUL_OSCURO, fg="white",
-                command=self.solve_step_by_step
-            )
+                command=self.solve_step_by_step)
             self.step_button.pack(pady=5)
-
+    
             self.solution_frame.place(relx=0.0, rely=1.0, anchor="sw", x=10, y=-10)
         self.solution_visible = not self.solution_visible
-
+    
     def toggle_mode(self):
+        """Cambia entre modo de insertar número y modo de insertar nota."""
         self.mode = "note" if self.mode == "number" else "number"
-        self.mode_button.config(text=f"{'Nota' if self.mode == 'note' else 'Num'}")
+        self.mode_button.config(text="Nota" if self.mode == "note" else "Num")
         self.mode_button.config(bg="#33ccff" if self.mode == "note" else AZUL_OSCURO)
-
+    
     def toggle_error_focus(self):
+        """Activa o desactiva la visualización de errores y actualiza las celdas."""
         self.error_focus = not self.error_focus
         self.error_button.config(bg=ROJO if self.error_focus else AZUL_OSCURO)
         self.check_conflicts()
-
+    
     def check_conflicts(self):
+        """Verifica errores en el tablero actual, incluyendo errores en notas si están activados."""
         for row in self.cells:
             for cell in row:
                 cell.error = False
                 cell.error_notes.clear()
-
-        def collect(r, c): return self.cells[r][c].number
-
+    
+        def collect(r, c):
+            return self.cells[r][c].number
+    
         for i in range(9):
             self.mark_duplicates([(i, j) for j in range(9)], [collect(i, j) for j in range(9)])
             self.mark_duplicates([(j, i) for j in range(9)], [collect(j, i) for j in range(9)])
-
+    
         for bi in range(3):
             for bj in range(3):
                 block = []
@@ -384,7 +533,7 @@ class SudokuGUI(tk.Tk):
                         block.append((r, c))
                         vals.append(collect(r, c))
                 self.mark_duplicates(block, vals)
-
+    
         if self.error_focus:
             for r in range(9):
                 for c in range(9):
@@ -393,15 +542,23 @@ class SudokuGUI(tk.Tk):
                         for note in list(cell.notes):
                             if self.note_violates(r, c, note):
                                 cell.error_notes.add(note)
-
+    
         for row in self.cells:
             for cell in row:
                 cell.update_display()
-
+    
     def mark_duplicates(self, positions, values):
+        """
+        Marca celdas duplicadas (conflictivas) en una fila, columna o bloque.
+    
+        Args:
+            positions (list): Lista de coordenadas (fila, columna).
+            values (list): Lista de valores correspondientes a esas posiciones.
+        """
         seen = {}
         for idx, v in enumerate(values):
-            if v is None: continue
+            if v is None:
+                continue
             if v in seen:
                 r1, c1 = positions[seen[v]]
                 r2, c2 = positions[idx]
@@ -409,26 +566,42 @@ class SudokuGUI(tk.Tk):
                 self.cells[r2][c2].error = True
             else:
                 seen[v] = idx
-
+    
     def note_violates(self, row, col, value):
+        """
+        Verifica si una nota viola las reglas del Sudoku.
+    
+        Args:
+            row (int): Fila de la celda.
+            col (int): Columna de la celda.
+            value (int): Valor anotado.
+    
+        Returns:
+            bool: True si hay un conflicto, False si es válida.
+        """
         for i in range(9):
-            if self.cells[row][i].number == value: return True
-            if self.cells[i][col].number == value: return True
+            if self.cells[row][i].number == value:
+                return True
+            if self.cells[i][col].number == value:
+                return True
         br, bc = 3 * (row // 3), 3 * (col // 3)
         for i in range(3):
             for j in range(3):
-                if self.cells[br + i][bc + j].number == value: return True
+                if self.cells[br + i][bc + j].number == value:
+                    return True
         return False
-
+    
     def clear_selected_cell(self):
+        """Borra el contenido de la celda seleccionada y actualiza errores si están activados."""
         if self.selected_cell:
             self.history.append(self.capture_board_state())
             self.selected_cell.set_number(None)
             if self.error_focus:
                 self.check_conflicts()
             self.update_undo_button_state()
-
+    
     def clear_board(self):
+        """Limpia completamente el tablero, incluyendo números y notas."""
         for row in self.cells:
             for cell in row:
                 cell.number = None
@@ -437,23 +610,44 @@ class SudokuGUI(tk.Tk):
         if self.error_focus:
             self.check_conflicts()
         self.update_undo_button_state()
-
+    
     def set_selected_cell(self, cell):
+        """
+        Establece la celda actualmente seleccionada.
+    
+        Args:
+            cell (SudokuCell): Nueva celda seleccionada.
+        """
         if self.selected_cell:
             self.selected_cell.set_selected(False)
         self.selected_cell = cell
         self.selected_cell.set_selected(True)
         self.focus_set()
-
+    
     def move_selection(self, dr, dc):
-        if not self.selected_cell: return
+        """
+        Mueve la selección actual en dirección relativa.
+    
+        Args:
+            dr (int): Cambio en filas (-1, 0, 1).
+            dc (int): Cambio en columnas (-1, 0, 1).
+        """
+        if not self.selected_cell:
+            return
         r, c = self.selected_cell.row, self.selected_cell.col
         nr, nc = r + dr, c + dc
         if 0 <= nr < 9 and 0 <= nc < 9:
             self.set_selected_cell(self.cells[nr][nc])
-
+    
     def enter_input(self, num):
-        if not self.selected_cell: return
+        """
+        Inserta un número o nota en la celda seleccionada.
+    
+        Args:
+            num (int): Número del 1 al 9.
+        """
+        if not self.selected_cell:
+            return
         self.history.append(self.capture_board_state())
         if self.mode == "number":
             self.selected_cell.set_number(num)
@@ -462,8 +656,14 @@ class SudokuGUI(tk.Tk):
         if self.error_focus:
             self.check_conflicts()
         self.update_undo_button_state()
-
+    
     def key_input(self, event):
+        """
+        Maneja entrada del teclado para borrar, cambiar modo o ingresar números.
+    
+        Args:
+            event: Evento de tecla presionada.
+        """
         if event.keysym in ('BackSpace', 'Delete'):
             self.clear_selected_cell()
         elif event.char == '0':
@@ -472,6 +672,7 @@ class SudokuGUI(tk.Tk):
             self.enter_input(int(event.char))
 
     def import_from_excel(self):
+        """Carga un tablero y sus notas desde un archivo Excel (.xlsx o .xls)."""
         path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
         if not path: return
         try:
@@ -480,7 +681,7 @@ class SudokuGUI(tk.Tk):
             xls = pd.ExcelFile(path)
             has_notes = len(xls.sheet_names) > 1
             notes = pd.read_excel(path, header=None, sheet_name=1) if has_notes else None
-
+    
             for i in range(9):
                 for j in range(9):
                     cell = self.cells[i][j]
@@ -493,7 +694,7 @@ class SudokuGUI(tk.Tk):
                     except: pass
                     cell.number = num
                     cell.notes.clear()
-
+    
                     if has_notes and cell.number is None:
                         if i < notes.shape[0] and j < notes.shape[1]:
                             raw = notes.iat[i, j]
@@ -510,8 +711,9 @@ class SudokuGUI(tk.Tk):
             self.update_undo_button_state()
         except Exception as e:
             messagebox.showerror("Error", "No se pudo cargar:\n" + str(e))
-
+    
     def save_to_excel(self):
+        """Guarda el estado actual del tablero y las notas en un archivo Excel."""
         path = filedialog.asksaveasfilename(defaultextension=".xlsx",
                                             filetypes=[("Excel files", "*.xlsx *.xls")])
         if not path: return
@@ -524,8 +726,9 @@ class SudokuGUI(tk.Tk):
             messagebox.showinfo("Guardado", "Partida y notas guardadas.")
         except Exception as e:
             messagebox.showerror("Error", "No se pudo guardar:\n" + str(e))
-        
+    
     def initialize_notes(self):
+        """Inicializa las notas en cada celda vacía con los candidatos posibles válidos."""
         for r in range(9):
             for c in range(9):
                 cell = self.cells[r][c]
@@ -543,8 +746,14 @@ class SudokuGUI(tk.Tk):
                 else:
                     cell.notes.clear()
                 cell.update_display()
-        
+    
     def fill_obvious_numbers(self):
+        """
+        Coloca automáticamente números cuando solo existe un lugar posible para ellos en una unidad.
+        
+        Returns:
+            bool: True si al menos un número fue colocado.
+        """
         def buscar_y_colocar(grupos):
             colocado = False
             for grupo in grupos:
@@ -571,6 +780,12 @@ class SudokuGUI(tk.Tk):
         return changes
     
     def eliminate_notes(self):
+        """
+        Elimina de las notas los números que ya están colocados en su fila, columna o bloque.
+        
+        Returns:
+            bool: True si se eliminaron notas.
+        """
         changes = False
         for r in range(9):
             for c in range(9):
@@ -594,6 +809,7 @@ class SudokuGUI(tk.Tk):
         return changes
     
     def solve_sudoku(self):
+        """Resuelve automáticamente el Sudoku actual con técnicas lógicas y backtracking si es necesario."""
         self.history.append(self.capture_board_state())
         while True:
             self.initialize_notes()
@@ -603,18 +819,25 @@ class SudokuGUI(tk.Tk):
                 if not changed:
                     self.backtrack_solve()
                     break
-            
+    
     def solve_step_by_step(self):
+        """Resuelve el Sudoku paso a paso: primero coloca obvios, luego elimina notas. Si no hay avances, usa backtracking."""
         self.history.append(self.capture_board_state())
         self.initialize_notes()
         state = self.fill_obvious_numbers()
         if not state:
-           state = self.eliminate_notes()
-           if not state:
-               messagebox.showinfo("Sudoku", "Aunque hayan posibles eliminaciones, se resuelve por bingo del arquero")
-               self.backtrack_solve()
+            state = self.eliminate_notes()
+            if not state:
+                messagebox.showinfo("Sudoku", "Aunque hayan posibles eliminaciones, se resuelve por bingo del arquero")
+                self.backtrack_solve()
     
     def get_all_units(self):
+        """
+        Devuelve todas las unidades del tablero: filas, columnas y bloques.
+    
+        Returns:
+            list: Lista de listas de celdas.
+        """
         units = []
         for i in range(9):
             units.append([self.cells[i][j] for j in range(9)])  # filas
@@ -627,8 +850,9 @@ class SudokuGUI(tk.Tk):
                     for c in range(bc, bc+3)
                 ])
         return units
-        
+    
     def backtrack_solve(self):
+        """Aplica backtracking para resolver el tablero si no se puede resolver lógicamente."""
         board = [[cell.number for cell in row] for row in self.cells]
         
         def solve():
@@ -643,8 +867,8 @@ class SudokuGUI(tk.Tk):
                     board[r][c] = n
                     if solve():
                         return True
-                    board[r][c] = None  # deshacer
-            return False  # backtrack
+                    board[r][c] = None
+            return False
         
         if solve():
             for r in range(9):
@@ -652,8 +876,14 @@ class SudokuGUI(tk.Tk):
                     self.cells[r][c].set_number(board[r][c])
         else:
             messagebox.showinfo("Sudoku", "No se pudo resolver: tablero ilegal o sin solución.")
-            
+    
     def generate_sudoku(self, diff):
+        """
+        Genera un nuevo Sudoku completamente válido y lo presenta con la dificultad dada.
+    
+        Args:
+            diff (int): Nivel de dificultad (0=fácil, 1=medio, 2=difícil, 3=experto).
+        """
         levels = [38, 30, 23, 17]
         revealed_count = levels[diff]
         
@@ -690,6 +920,7 @@ class SudokuGUI(tk.Tk):
             self.check_conflicts()
         self.start_timer()
         self.update_undo_button_state()
+
         
 if __name__ == "__main__":
     app = SudokuGUI()
